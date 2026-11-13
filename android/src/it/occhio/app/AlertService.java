@@ -5,6 +5,16 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.graphics.PixelFormat;
+import android.graphics.Typeface;
+import android.provider.Settings;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.IntentFilter;
@@ -54,7 +64,7 @@ public class AlertService extends Service implements LocationListener {
 
     private static class Alert {
         double lat, lon;
-        String name, phrase;
+        String name, phrase, label, kind;
         String[] clips;            // indirizzi delle clip registrate (può essere vuoto)
         volatile File[] files;     // le stesse clip, scaricate sul telefono
         boolean done;
@@ -76,6 +86,8 @@ public class AlertService extends Service implements LocationListener {
     private int shownLeft = -1;
     private final ArrayDeque<File> queue = new ArrayDeque<>();
     private MediaPlayer player;
+    private View card;
+    private final Runnable hideCard = this::hideCard;
     private BroadcastReceiver debugReceiver;
 
     @Override
@@ -169,6 +181,8 @@ public class AlertService extends Service implements LocationListener {
                 a.lon = o.getDouble("lon");
                 a.name = o.getString("name");
                 a.phrase = o.optString("phrase", "");
+                a.label = o.optString("label", "Occhio");
+                a.kind = o.optString("kind", "");
                 JSONArray cl = o.optJSONArray("clips");
                 a.clips = new String[cl == null ? 0 : cl.length()];
                 for (int k = 0; k < a.clips.length; k++) a.clips[k] = cl.getString(k);
@@ -230,7 +244,7 @@ public class AlertService extends Service implements LocationListener {
         String text = a.phrase.isEmpty() ? a.name : a.name + " — " + a.phrase;
         Notification n = new Notification.Builder(this, CH_ALERT)
                 .setSmallIcon(R.drawable.ic_notif)
-                .setColor(0xFFD93025)
+                .setColor(0xFFFF9800)
                 .setContentTitle("Occhio · tra " + m + " m")
                 .setContentText(text)
                 .setStyle(new Notification.BigTextStyle().bigText(text))
@@ -241,8 +255,74 @@ public class AlertService extends Service implements LocationListener {
                 .setContentIntent(openApp())
                 .build();
         nm.notify(100 + fired++, n);
+        showCard(a, m);
         if (!playClips(a)) speak("Occhio. " + a.name + ". " + a.phrase);
         Log.i(TAG, "avviso: " + text + " a " + m + " m");
+    }
+
+    /**
+     * Avviso per chi guida: tutto lo schermo arancione, un simbolo, due parole molto grandi.
+     * Compare sopra l'app in uso (di solito il navigatore) per qualche secondo; un tocco lo chiude.
+     * Serve il permesso "mostra sopra altre app"; senza, resta la sola notifica.
+     */
+    private void showCard(Alert a, int meters) {
+        if (!Settings.canDrawOverlays(this)) return;
+        hideCard();
+        float dp = getResources().getDisplayMetrics().density;
+        int ink = 0xFF1A1200;
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER);
+        root.setBackgroundColor(0xFFFF9800);
+        root.setPadding((int) (24 * dp), (int) (24 * dp), (int) (24 * dp), (int) (24 * dp));
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource("ped".equals(a.kind) ? R.drawable.ic_alert_ped
+                : "lat".equals(a.kind) ? R.drawable.ic_alert_turn : R.drawable.ic_alert_warn);
+        root.addView(icon, new LinearLayout.LayoutParams((int) (170 * dp), (int) (170 * dp)));
+
+        TextView big = new TextView(this);
+        big.setText(a.label.toUpperCase(Locale.ITALIAN));
+        big.setTextColor(ink);
+        big.setTextSize(TypedValue.COMPLEX_UNIT_SP, 58);
+        big.setTypeface(Typeface.DEFAULT_BOLD);
+        big.setGravity(Gravity.CENTER);
+        big.setLineSpacing(0, 0.95f);
+        root.addView(big);
+
+        TextView where = new TextView(this);
+        where.setText("tra " + meters + " m · " + a.name);
+        where.setTextColor(ink);
+        where.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
+        where.setTypeface(Typeface.DEFAULT_BOLD);
+        where.setGravity(Gravity.CENTER);
+        where.setPadding(0, (int) (14 * dp), 0, 0);
+        root.addView(where);
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.OPAQUE);
+        lp.screenBrightness = 1f;   // tutto il telefono si illumina
+        root.setOnClickListener(v -> hideCard());
+        try {
+            getSystemService(WindowManager.class).addView(root, lp);
+            card = root;
+            handler.postDelayed(hideCard, 4500L);
+        } catch (Exception e) {
+            Log.w(TAG, "avviso a tutto schermo non mostrato", e);
+        }
+    }
+
+    private void hideCard() {
+        handler.removeCallbacks(hideCard);
+        if (card == null) return;
+        try {
+            getSystemService(WindowManager.class).removeView(card);
+        } catch (Exception ignored) { }
+        card = null;
     }
 
     /** Scarica le clip registrate alla partenza, così all'avviso sono già sul telefono. */
@@ -355,6 +435,7 @@ public class AlertService extends Service implements LocationListener {
         } catch (Exception ignored) { }
         if (debugReceiver != null) unregisterReceiver(debugReceiver);
         if (tts != null) tts.shutdown();
+        hideCard();
         queue.clear();
         if (player != null) { try { player.release(); } catch (Exception ignored) { } player = null; }
         stopForeground(true);

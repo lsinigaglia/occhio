@@ -226,6 +226,34 @@ public class MainActivity extends Activity {
             if (trusted && ttsReady) tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), "ui");
         }
 
+        /** Luminosità al massimo mentre è visibile un avviso. */
+        @JavascriptInterface
+        public void bright(boolean on) {
+            if (!trusted) return;
+            runOnUiThread(() -> {
+                android.view.WindowManager.LayoutParams lp = getWindow().getAttributes();
+                lp.screenBrightness = on ? 1f : android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+                getWindow().setAttributes(lp);
+            });
+        }
+
+        /** L'avviso a tutto schermo sopra le altre app richiede un permesso che dà solo l'utente. */
+        @JavascriptInterface
+        public boolean canOverlay() {
+            return android.provider.Settings.canDrawOverlays(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void askOverlay() {
+            if (!trusted) return;
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:" + getPackageName())));
+                } catch (Exception ignored) { }
+            });
+        }
+
         @JavascriptInterface
         public void keepAwake(boolean on) {
             if (!trusted) return;

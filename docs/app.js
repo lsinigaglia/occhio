@@ -526,6 +526,7 @@ $('#sheetc').onclick = e => {
   else if (a === 'start') startNav(false);
   else if (a === 'bgstart') startBackground();
   else if (a === 'gnav') openGmaps(true);
+  else if (a === 'overlay') NATIVE.askOverlay();
   else if (a === 'bgstop') { NATIVE.stopTrip(); setMode('preview'); }
   else if (a === 'gmaps') openGmaps(false);
   else if (a === 'exit') stopNav();
@@ -562,6 +563,7 @@ function startBackground() {
   const r = S.routes[S.sel];
   const alerts = top3(r).map(t => ({
     lat: t.h.lat, lon: t.h.lon, name: t.h.s1 || hname(t.h), phrase: phrase(t.h),
+    label: ALERT_LABEL[phraseKey(t.h)], kind: phraseKey(t.h),
     clips: (alertClips(t.h) || []).map(u => new URL(u, location.href).href),
   }));
   if (!alerts.length) { toast('Nessun punto critico su questo percorso'); return openGmaps(true); }
@@ -571,9 +573,12 @@ function startBackground() {
 }
 function bgHtml() {
   const r = S.routes[S.sel], top = top3(r);
-  return `<h2>Occhio è attivo</h2><p class="sub">${top.length ? 'Usa pure Google Maps: ti avviso a voce e con una notifica prima di questi punti.' : 'Nessun punto critico su questo percorso.'}</p>
+  let full = true;
+  try { full = !NATIVE.canOverlay || NATIVE.canOverlay(); } catch (e) { /* versione dell'app senza avviso a tutto schermo */ }
+  return `<h2>Occhio è attivo</h2><p class="sub">${top.length ? `Usa pure Google Maps: prima di questi punti ti avviso a voce e ${full ? 'con un avviso a tutto schermo' : 'con una notifica'}.` : 'Nessun punto critico su questo percorso.'}</p>
     <div class="actions" style="margin-bottom:4px"><button class="btn primary" type="button" data-act="gnav">${ICON.nav}Apri Google Maps</button>
     <button class="btn danger" type="button" data-act="bgstop">Termina</button></div>
+    ${full ? '' : `<div class="advice">${ICON.bulb}<div>Per l'avviso grande a tutto schermo, consenti a Occhio di comparire sopra le altre app. <button class="link" style="padding:6px 0 0;display:block" type="button" data-act="overlay">Attiva</button></div></div>`}
     ${top.map(t => `<div class="keep"><span class="badge ${hclass(t.h)}">${t.h.n}</span><span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(phrase(t.h))}</span></span></div>`).join('')}`;
 }
 
@@ -648,6 +653,7 @@ async function reroute(me) {
 
 function stopNav() {
   keepAwake(false);
+  setAlerting(false);
   if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   player.pause();
@@ -720,19 +726,50 @@ function updateNav(force) {
     if (dm <= 320 && dm > 110 && !st.v1) { st.v1 = true; say(`Tra ${fmtDist(dm).replace(' m', ' metri')}, ${stepText(st).replace(/^./, ch => ch.toLowerCase())}`); }
     else if (dm <= 45 && !st.v2) { st.v2 = true; say(stepText(st)); }
   }
-  // punto critico in arrivo
+  // Punto critico in arrivo. Per i punti da ricordare: lo schermo lampeggia e si illumina, e per
+  // qualche secondo una card grande arancione prende il posto della svolta (che resta sotto, in piccolo).
+  // Poi rimane una striscia compatta finché il punto non è superato.
   const next = n.r.hot.find(h => h.at > s - 25);
+  let alerting = false;
   if (next) {
     const h = S.hot[next.id], d = Math.max(0, next.at - s);
     if (d <= 260) {
-      html += `<div class="occ"><b>Occhio · tra ${fmtDist(d)}</b>${esc(h.s1 || hname(h))} — ${esc(phrase(h))}</div>`;
+      const k = phraseKey(h), top = n.voice.has(next.id), sym = ALERT_ICON[k] || ALERT_ICON.rallenta;
       if (!n.spoken.has(next.id)) {
         n.spoken.add(next.id);
-        if (n.voice.has(next.id)) sayAlert(h);
+        if (top) { n.bigUntil = now + 5000; flashScreen(); sayAlert(h); }
+      }
+      alerting = top;
+      if (top && now < n.bigUntil) {
+        html = `<div class="occbig"><span class="sym">${sym}</span><div><div class="lab">${esc(ALERT_LABEL[k])}</div><div class="where">tra ${fmtDist(d)} · ${esc(h.s1 || hname(h))}</div></div></div>`
+          + (st ? `<div class="manmini"><span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span></div>` : '');
+      } else {
+        html += `<div class="occ"><span class="sym">${sym}</span><div><b>${esc(ALERT_LABEL[k])} · tra ${fmtDist(d)}</b>${esc(h.s1 || hname(h))}</div></div>`;
       }
     }
   }
+  setAlerting(alerting);
   if (html !== n.key) { n.key = html; card.className = ''; card.innerHTML = html; }
+}
+
+// --- avviso per chi guida: poche parole grandi, un simbolo, tutto lo schermo che si accende
+const ALERT_LABEL = { ped: 'Pedoni', lat: 'Incrocio', tamp: 'Distanza', sosta: 'Doppia fila', fondo: 'Fondo insidioso', rallenta: 'Rallenta' };
+const ALERT_ICON = {
+  ped: '<svg viewBox="0 0 24 24"><path d="M13.500 5.500c1.100 0 2-.900 2-2s-.900-2-2-2-2 .900-2 2 .900 2 2 2zM9.800 8.900L7 23h2.100l1.800-8 2.100 2v6h2v-7.500l-2.100-2 .600-3C14.800 12 16.800 13 19 13v-2c-1.900 0-3.500-1-4.300-2.400l-1-1.600c-.400-.600-1-1-1.700-1-.300 0-.500.100-.800.100L6 8.300V13h2V9.600l1.800-.700"/></svg>',
+  lat: '<svg viewBox="0 0 24 24"><path d="M14 4l2.290 2.290-2.880 2.880 1.420 1.420 2.880-2.880L20 10V4zm-4 0H4v6l2.290-2.290 4.710 4.700V20h2v-8.410l-5.290-5.300z"/></svg>',
+  rallenta: '<svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
+};
+const flashEl = document.body.appendChild(Object.assign(document.createElement('div'), { id: 'flash' }));
+function flashScreen() {
+  flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go');
+  try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch (e) { /* non tutti i telefoni vibrano dal browser */ }
+}
+let alertingNow = false;
+function setAlerting(on) {
+  if (on === alertingNow) return;
+  alertingNow = on;
+  document.body.classList.toggle('alerting', on);
+  try { if (NATIVE && NATIVE.bright) NATIVE.bright(on); } catch (e) { /* versione dell'app senza questa funzione */ }
 }
 function navBarHtml() {
   return `<div class="navbar"><div class="eta" id="eta"></div>
@@ -748,6 +785,7 @@ function finishNav() {
   card.innerHTML = `<div class="man done"><div><div class="k">Sei arrivato</div><div class="name">${got === 0 ? 'Nessun punto critico attraversato.' : got === 1 ? 'Hai attraversato un punto critico.' : `Hai attraversato ${got} punti critici.`}${cmp}</div></div></div>`;
   n.key = 'done';
   keepAwake(false);
+  setAlerting(false);
   say(`Sei arrivato.${cmp}`);
   const eta = $('#eta'); if (eta) eta.innerHTML = '<b>Arrivato</b><span>Tocca Esci per tornare al percorso</span>';
 }
@@ -765,7 +803,8 @@ window.occhioBack = () => {
 
 /* tornando nell'app: se gli avvisi si sono fermati da soli, la schermata lo deve dire */
 document.addEventListener('visibilitychange', () => {
-  if (NATIVE && !document.hidden && S.mode === 'bg' && !NATIVE.isActive()) setMode('preview');
+  if (!NATIVE || document.hidden || S.mode !== 'bg') return;
+  if (!NATIVE.isActive()) setMode('preview'); else render();   // il permesso per l'avviso grande può essere cambiato nel frattempo
 });
 
 /* avvio */
