@@ -424,7 +424,7 @@ function previewHtml() {
   h += `<div class="actions"><button class="btn primary" type="button" data-act="start">${ICON.nav}Avvia</button>
     <button class="btn tonal" type="button" data-act="sim">${ICON.play}Simula</button>
     ${NATIVE ? '' : `<button class="btn ghost" type="button" data-act="gmaps" aria-label="Apri in Google Maps">${ICON.gmaps}</button>`}</div>`;
-  if (NATIVE) h += `<div class="actions" style="margin-top:8px"><button class="btn ghost" style="flex:1" type="button" data-act="bgstart">${ICON.gmaps}Usa Google Maps con gli avvisi di Occhio</button></div>`;
+  if (NATIVE) h += `<div class="actions" style="margin-top:8px"><button class="btn ghost" style="flex:1" type="button" data-act="bgstart">${ICON.gmaps}Usa Google Maps con gli avvisi</button></div>`;
   const top = top3(r), topIds = new Set(top.map(t => t.h.id));
   const row = (p, x) => { const g = grouped(p)[0]; return `<button class="hrow" type="button" data-hot="${p.id}"><span class="badge ${hclass(p)}">${p.n}</span>
       <span class="hmain"><b>${esc(hname(p))}</b><span>${p.tw} con due ruote${g ? ' · ' + esc(g[0].toLowerCase()) : ''}</span></span>
