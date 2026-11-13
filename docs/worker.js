@@ -69,11 +69,35 @@ async function init() {
   for (const [n, segs] of byName) {
     const name = G.names[n];
     if (/^[A-Z]{0,3}\s?\d+/.test(name)) continue; // sigle tipo "A90", "SS7"
-    const s = segs[segs.length >> 1];
-    streets.push({
-      name, norm: norm(name),
-      lat: (latD[G.a[s]] + latD[G.b[s]]) / 2, lon: (lonD[G.a[s]] + lonD[G.b[s]]) / 2,
-    });
+    const mid = s => [(latD[G.a[s]] + latD[G.b[s]]) / 2, (lonD[G.a[s]] + lonD[G.b[s]]) / 2];
+    const cells = new Map();
+    for (const s of segs) {
+      const [la, lo] = mid(s), k = Math.floor(la / 0.012) * 100000 + Math.floor(lo / 0.016);
+      let c = cells.get(k); if (!c) cells.set(k, c = []); c.push(s);
+    }
+    const seen = new Set(), groups = [];
+    for (const k of cells.keys()) {
+      if (seen.has(k)) continue;
+      const g = [], stack = [k]; seen.add(k);
+      while (stack.length) {
+        const c = stack.pop(); g.push(...cells.get(c));
+        for (const dy of [-1, 0, 1]) for (const dx of [-1, 0, 1]) {
+          const nb = c + dy * 100000 + dx;
+          if (cells.has(nb) && !seen.has(nb)) { seen.add(nb); stack.push(nb); }
+        }
+      }
+      let len = 0, sla = 0, slo = 0;
+      for (const s of g) { const [la, lo] = mid(s); len += G.len[s]; sla += la * G.len[s]; slo += lo * G.len[s]; }
+      const cla = sla / len, clo = slo / len;
+      let best = g[0], bd = Infinity;
+      for (const s of g) { const [la, lo] = mid(s), d = distM(cla, clo, la, lo); if (d < bd) { bd = d; best = s; } }
+      groups.push({ len, at: mid(best) });
+    }
+    groups.sort((a, b) => b.len - a.len);
+    for (const g of groups.slice(0, 3)) {
+      if (g.len < 80 && groups.length > 1) continue;
+      streets.push({ name, norm: norm(name), lat: g.at[0], lon: g.at[1], dc: distM(41.8956, 12.4823, g.at[0], g.at[1]) / 1000 });
+    }
   }
   return { meta: G.meta, hotspots: HOT.map(({ segs, ...rest }) => rest), nodes: N, segs: E };
 }
@@ -203,11 +227,20 @@ function searchStreets(q) {
     for (const t of toks) if (!s.norm.includes(t)) { ok = false; break; }
     if (!ok) continue;
     const words = s.norm.split(' ');
-    const score = (s.norm.startsWith(qn) ? 0 : 40) + (words.some(w => w.startsWith(toks[0])) ? 0 : 20) + s.norm.length * 0.3;
+    const score = (s.norm.startsWith(qn) ? 0 : 40) + (words.some(w => w.startsWith(toks[0])) ? 0 : 20) + s.norm.length * 0.3 + s.dc * 1.2;   // a parità di nome, prima le strade più centrali
     out.push({ score, s });
   }
   out.sort((a, b) => a.score - b.score);
-  return out.slice(0, 6).map(o => ({ name: o.s.name, sub: 'Roma', lat: o.s.lat, lon: o.s.lon }));
+  return out.slice(0, 6).map(o => ({ name: o.s.name, sub: 'Roma · ' + zone(o.s.lat, o.s.lon), lat: o.s.lat, lon: o.s.lon }));
+}
+
+// dove si trova un punto rispetto al centro (piazza Venezia), per distinguere strade omonime
+function zone(lat, lon) {
+  const dx = (lon - 12.4823) * MX, dy = (lat - 41.8956) * MY, d = Math.hypot(dx, dy);
+  if (d < 2500) return 'centro';
+  const dirs = ['est', 'nord-est', 'nord', 'nord-ovest', 'ovest', 'sud-ovest', 'sud', 'sud-est'];
+  const k = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+  return `${Math.round(d / 1000)} km a ${dirs[(k + 8) % 8]} del centro`;
 }
 
 let ready = null;

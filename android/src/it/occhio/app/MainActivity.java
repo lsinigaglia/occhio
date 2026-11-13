@@ -200,6 +200,10 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean startTrip(String json) {
             if (!trusted) return false;
+            if (!hasLocation()) {
+                runOnUiThread(MainActivity.this::askPermissions);
+                return false;
+            }
             runOnUiThread(() -> MainActivity.this.startTrip(json));
             return true;
         }

@@ -61,7 +61,10 @@ const line = coords => ({ type: 'Feature', properties: {}, geometry: { type: 'Li
 let meMarker, fromMarker, toMarker, puck;
 
 // 'style.load' arriva prima di 'load' (che aspetta tutte le tessere): l'app è usabile prima
-const mapReady = new Promise(res => map.once('style.load', res));
+const mapReady = new Promise((res, rej) => {
+  map.once('style.load', res);
+  setTimeout(() => rej(new Error('La mappa di base non risponde.')), 20000);
+});
 const dataReady = call('init');
 
 const appReady = Promise.all([mapReady, dataReady]).then(([, d]) => {
@@ -98,7 +101,7 @@ const appReady = Promise.all([mapReady, dataReady]).then(([, d]) => {
     }
   }).catch(() => {});
 });
-appReady.catch(err => { $('#sheetc').innerHTML = `<p class="sub">Non riesco a caricare i dati. Ricarica la pagina.</p><p class="note">${esc(err.message)}</p>`; });
+appReady.catch(err => { S.failed = err.message || 'errore'; render(); });
 
 /* ------------------------------------------------------------------ utilità */
 const fmtMin = s => Math.max(1, Math.round(s / 60)) + ' min';
@@ -271,8 +274,11 @@ async function showResults(q) {
       box.innerHTML = items.length ? items.map((it, i) => resRow(ICON.pin, '', it.name, it.sub, i)).join('') : '<div class="rhead">Nessun risultato a Roma</div>';
       box._items = items;
     };
-    paint();
-    try { remote = await photon(q); if (my === searchSeq) paint(); } catch (e) { /* resta la ricerca locale */ }
+    box.innerHTML = '<div class="rhead">Cerco…</div>'; box._items = [];
+    const late = setTimeout(() => { if (my === searchSeq) paint(); }, 1500);
+    try { remote = await photon(q); } catch (e) { /* resta la ricerca locale */ }
+    clearTimeout(late);
+    if (my === searchSeq) paint();
     return;
   }
   box.innerHTML = html; box._items = items;
@@ -299,7 +305,7 @@ async function go() {
   } catch (e) { r = { error: 'errore' }; }
   if (r.error) {
     toast({ fuori: 'Partenza o arrivo fuori dall\'area coperta (Roma, dentro il raccordo)', vicino: 'Partenza e arrivo sono troppo vicini', nessuno: 'Non trovo un percorso tra questi due punti' }[r.error] || 'Qualcosa è andato storto, riprova');
-    S.routes = null; return setMode('home');
+    wipeRoutes(); return setMode('home');
   }
   S.routes = r; S.sel = r.safe ? 'safe' : 'fast';
   map.getSource('r-fast').setData(line(r.fast.coords));
@@ -314,6 +320,7 @@ async function go() {
   select(S.sel, true);
 }
 function fit() {
+  map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
   const b = new maplibregl.LngLatBounds();
   for (const k of ['fast', 'safe']) if (S.routes[k]) for (const c of S.routes[k].coords) b.extend(c);
   map.fitBounds(b, { padding: { top: $('#top').offsetHeight + 50, bottom: $('#sheet').offsetHeight + 36, left: 44, right: 44 }, duration: 700, pitch: 0, bearing: 0 });
@@ -333,11 +340,16 @@ function select(k, doFit) {
   render();
   if (doFit) setTimeout(fit, 120);
 }
-function clearRoutes() {
-  S.routes = null; S.to = null; S.from = null;
-  for (const id of ['r-fast', 'r-safe', 'hot-route']) map.getSource(id).setData(empty);
+function wipeRoutes() {
+  S.routes = null;
+  for (const id of ['r-fast', 'r-safe', 'hot-route']) { const src = map.getSource(id); if (src) src.setData(empty); }
   if (fromMarker) fromMarker.remove(); if (toMarker) toMarker.remove();
+}
+function clearRoutes() {
+  if (NATIVE && S.mode === 'bg') NATIVE.stopTrip();
+  wipeRoutes(); S.to = null; S.from = null;
   setMode('home');
+  map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
   map.easeTo({ pitch: 0, bearing: 0, duration: 400 });
 }
 $('#tripback').onclick = clearRoutes;
@@ -356,6 +368,11 @@ function setMode(m) {
 
 function render() {
   const c = $('#sheetc');
+  if (S.failed) {
+    c.innerHTML = `<h2>Occhio non riesce a partire</h2><p class="sub">${esc(S.failed)} Controlla la connessione e riprova.</p>
+      <div class="actions"><button class="btn primary" type="button" data-act="reload">Riprova</button></div>`;
+    return syncSheetHeight();
+  }
   if (!S.ready) { c.innerHTML = '<div class="loading"><div class="spin"></div>Carico le strade di Roma…</div>'; return; }
   if (S.mode === 'home') c.innerHTML = homeHtml();
   else if (S.mode === 'loading') c.innerHTML = '<div class="loading"><div class="spin"></div>Calcolo i percorsi…</div>';
@@ -388,7 +405,7 @@ function rcard(k, r, label) {
   return `<button class="rcard ${k} ${S.sel === k ? 'sel' : ''}" type="button" data-sel="${k}">
     <span class="rlabel"><i></i>${label}</span><span class="rtime">${fmtMin(r.time)}</span>
     <span class="rsub">${fmtKm(r.dist)}${r.via[0] ? ' · ' + esc(r.via[0]) : ''}</span>
-    <span class="rstat"><b>${r.hot.length}</b> punti critici</span>
+    <span class="rstat"><b>${r.hot.length}</b> ${r.hot.length === 1 ? 'punto critico' : 'punti critici'}</span>
     <span class="rstat"><b>${r.inc}</b> incidenti</span></button>`;
 }
 function previewHtml() {
@@ -396,7 +413,10 @@ function previewHtml() {
   let h = '';
   if (safe) {
     const dm = Math.max(1, Math.round((safe.time - fast.time) / 60)), dh = fast.hot.length - safe.hot.length;
-    h += `<p class="gain">Più prudente: +${dm} min, <b>${dh > 0 ? dh + (dh === 1 ? ' punto critico' : ' punti critici') + ' in meno, ' : ''}−${pct(fast.inc - safe.inc, fast.inc)}% incidenti registrati</b> sul tragitto.</p>`;
+    const gains = [];
+    if (dh > 0) gains.push(dh + (dh === 1 ? ' punto critico in meno' : ' punti critici in meno'));
+    if (safe.inc < fast.inc) gains.push(`−${pct(fast.inc - safe.inc, fast.inc)}% incidenti registrati`);
+    h += `<p class="gain">Più prudente: +${dm} min, <b>${gains.join(', ') || 'meno incidenti gravi'}</b> sul tragitto.</p>`;
     h += `<div class="rcards">${rcard('safe', safe, 'Più prudente')}${rcard('fast', fast, 'Più veloce')}</div>`;
   } else {
     h += `<p class="gain">Su questo tragitto il percorso più veloce è già quello con meno punti critici.</p><div class="rcards one">${rcard('fast', fast, 'Percorso consigliato')}</div>`;
@@ -447,7 +467,8 @@ function openHot(id) {
   if (S.mode !== 'hot') S.prev = S.mode === 'about' ? 'home' : S.mode;
   S.hotId = id; setMode('hot');
   const h = S.hot[id];
-  map.easeTo({ center: [h.lon, h.lat], zoom: Math.max(map.getZoom(), 15.5), padding: { top: 90, bottom: Math.min(innerHeight * 0.52, 420), left: 0, right: 0 }, duration: 600 });
+  map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+  map.easeTo({ center: [h.lon, h.lat], zoom: Math.max(map.getZoom(), 15.5), offset: [0, -Math.min(innerHeight * 0.2, 170)], duration: 600 });
 }
 
 $('#sheetc').onclick = e => {
@@ -455,7 +476,8 @@ $('#sheetc').onclick = e => {
   if (t.dataset.sel) return select(t.dataset.sel);
   if (t.dataset.hot) return openHot(+t.dataset.hot);
   const a = t.dataset.act;
-  if (a === 'about') setMode('about');
+  if (a === 'reload') location.reload();
+  else if (a === 'about') setMode('about');
   else if (a === 'home') setMode('home');
   else if (a === 'hotback') { setMode(S.prev || 'home'); if (S.routes) fit(); else map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 }); }
   else if (a === 'sim') startNav(true);
@@ -464,7 +486,12 @@ $('#sheetc').onclick = e => {
   else if (a === 'bgstop') { NATIVE.stopTrip(); setMode('preview'); }
   else if (a === 'gmaps') openGmaps(false);
   else if (a === 'exit') stopNav();
-  else if (a === 'mute') { S.mute = !S.mute; if (S.mute && window.speechSynthesis) speechSynthesis.cancel(); render(); }
+  else if (a === 'mute') {
+    S.mute = !S.mute;
+    if (S.mute) { if (NATIVE) NATIVE.speak(''); else if (window.speechSynthesis) speechSynthesis.cancel(); }
+    render();
+    if (S.nav) { if (S.nav.done) { const e = $('#eta'); if (e) e.innerHTML = '<b>Arrivato</b><span>Tocca Esci per tornare al percorso</span>'; } else updateNav(true); }
+  }
 };
 
 /* pannello: tocco o trascinamento sulla maniglia per allargarlo */
@@ -491,7 +518,8 @@ function openGmaps(navigate) {
 function startBackground() {
   const r = S.routes[S.sel];
   const alerts = top3(r).map(t => ({ lat: t.h.lat, lon: t.h.lon, name: t.h.s1 || hname(t.h), phrase: phrase(t.h) }));
-  if (!NATIVE.startTrip(JSON.stringify({ alerts }))) return toast('Non riesco ad attivare gli avvisi');
+  if (!alerts.length) { toast('Nessun punto critico su questo percorso'); return openGmaps(true); }
+  if (!NATIVE.startTrip(JSON.stringify({ alerts }))) return toast('Consenti la posizione precisa a Occhio, poi tocca di nuovo Avvia');
   setMode('bg');
   setTimeout(() => openGmaps(true), 500);
 }
@@ -523,7 +551,10 @@ function startNav(sim) {
   if (sim) requestAnimationFrame(tick);
   else {
     toast('Seguo la tua posizione');
-    watchId = navigator.geolocation.watchPosition(onPos, () => toast('Segnale GPS assente'), { enableHighAccuracy: true, maximumAge: 1000 });
+    watchId = navigator.geolocation.watchPosition(onPos, err => {
+      if (err && err.code === 1) { stopNav(); toast('Posizione non consentita: usa Simula, oppure consenti la posizione'); }
+      else toast('Segnale GPS assente');
+    }, { enableHighAccuracy: true, maximumAge: 1000 });
   }
 }
 function stopNav() {
@@ -557,7 +588,7 @@ function camera(p, dt) {
 }
 function tick(now) {
   const n = S.nav; if (!n || !n.sim || n.done) return;
-  const dt = Math.min(0.1, (now - n.last) / 1000); n.last = now;
+  const dt = Math.min(0.5, (now - n.last) / 1000); n.last = now;
   const next = n.r.hot.find(h => h.at > n.s - 30);
   const d = next ? next.at - n.s : Infinity;
   const target = d < 320 ? 13 : 60;                    // rallenta vicino ai punti critici
@@ -630,10 +661,15 @@ window.occhioBack = () => {
   if (S.mode === 'nav') { stopNav(); return true; }
   if (S.mode === 'hot') { setMode(S.prev || 'home'); if (S.routes) fit(); return true; }
   if (S.mode === 'about') { setMode('home'); return true; }
-  if (S.mode === 'bg') { setMode('preview'); return true; }
+  if (S.mode === 'bg') return false;   // l'app va in secondo piano, gli avvisi restano attivi
   if (S.mode === 'preview') { clearRoutes(); return true; }
   return false;
 };
+
+/* tornando nell'app: se gli avvisi si sono fermati da soli, la schermata lo deve dire */
+document.addEventListener('visibilitychange', () => {
+  if (NATIVE && !document.hidden && S.mode === 'bg' && !NATIVE.isActive()) setMode('preview');
+});
 
 /* avvio */
 render();

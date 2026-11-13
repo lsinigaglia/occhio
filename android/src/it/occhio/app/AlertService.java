@@ -193,7 +193,7 @@ public class AlertService extends Service implements LocationListener {
             if (a.done) continue;
             Location.distanceBetween(loc.getLatitude(), loc.getLongitude(), a.lat, a.lon, r);
             float d = r[0];
-            boolean approaching = Float.isNaN(a.last) || d <= a.last + 3f;
+            boolean approaching = !Float.isNaN(a.last) && d < a.last - 1f;
             a.last = d;
             if (d <= threshold && approaching) {
                 a.done = true;
@@ -205,7 +205,7 @@ public class AlertService extends Service implements LocationListener {
         if (left != shownLeft) {
             shownLeft = left;
             nm.notify(1, ongoing(left));
-            if (left == 0 && !alerts.isEmpty()) handler.postDelayed(stopLater, 120000L);
+            if (left == 0) handler.postDelayed(stopLater, 120000L);
         }
     }
 
@@ -274,7 +274,12 @@ public class AlertService extends Service implements LocationListener {
         super.onDestroy();
     }
 
-    @Override public void onProviderEnabled(String provider) { }
+    @Override
+    public void onProviderEnabled(String provider) {
+        try {
+            lm.requestLocationUpdates(provider, 1000L, 0f, this, Looper.getMainLooper());
+        } catch (SecurityException | IllegalArgumentException ignored) { }
+    }
     @Override public void onProviderDisabled(String provider) { }
     @Override public void onStatusChanged(String provider, int status, Bundle extras) { }
 }
