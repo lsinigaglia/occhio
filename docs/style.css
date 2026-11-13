@@ -164,3 +164,9 @@ body.nav #top, body.nav .fab { display: none; }
 .update { background: #e8f0fe; border-radius: 14px; padding: 12px; margin-top: 14px; font-size: 14px; line-height: 1.4; }
 .update b { display: block; font-weight: 500; color: var(--blue); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
 .update a { display: block; margin-top: 6px; font-size: 12px; color: var(--blue); }
+
+/* i punti da ricordare */
+.keep { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 12px; margin-top: 8px; border-radius: 16px; background: #fff4e5; border: 1.5px solid #f6c98a; }
+.keep .hmain b { font-size: 16px; }
+.keep .say { color: #8a4b00; font-size: 14px; font-weight: 500; white-space: normal; }
+.keep .say::first-letter { text-transform: uppercase; }

@@ -10,6 +10,9 @@ const CASE = { fast: '#0b4fb8', safe: '#0d5c28', off: '#6f83a6' };
 const MX = 111320 * Math.cos(41.9 * Math.PI / 180), MY = 110540;
 const distM = (a, b) => Math.hypot((b[0] - a[0]) * MX, (b[1] - a[1]) * MY);
 
+// Dentro l'app Android la pagina trova questo oggetto: avvisi in background, voce di sistema, Google Maps.
+const NATIVE = window.OcchioNative || null;
+
 const ICON = {
   pin: '<svg viewBox="0 0 24 24" class="ic"><path d="M12 2a7 7 0 0 0-7 7c0 5.200 7 13 7 13s7-7.800 7-13a7 7 0 0 0-7-7zm0 9.500a2.500 2.500 0 1 1 0-5 2.500 2.500 0 0 1 0 5z"/></svg>',
   me: '<svg viewBox="0 0 24 24" class="ic"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.900 3A9 9 0 0 0 13 3.100V1h-2v2.100A9 9 0 0 0 3.100 11H1v2h2.100A9 9 0 0 0 11 20.900V23h2v-2.100A9 9 0 0 0 20.900 13H23v-2h-2.100zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>',
@@ -133,6 +136,20 @@ function advice(h) {
   if (pct(h.bagnato, h.n) >= 30) a += ' Più rischioso con il bagnato.';
   return a;
 }
+// mezza frase da dire mentre si guida
+function phrase(h) {
+  const s = (h.nat[0] ? h.nat[0][0] : '').toLowerCase();
+  if (s.includes('pedone')) return 'attenzione agli attraversamenti pedonali';
+  if (s.includes('laterale')) return 'attenzione a chi svolta o si immette';
+  if (s.includes('tamponamento')) return 'tieni la distanza';
+  if (s.includes('sosta') || s.includes('fermo')) return 'attenzione a portiere e doppie file';
+  if (s.includes('ostacolo') || s.includes('fuoriuscita') || s.includes('caduta') || s.includes('buche')) return 'fondo insidioso, rallenta';
+  return 'rallenta';
+}
+// i tre punti peggiori del tragitto, nell'ordine in cui si incontrano
+function top3(r) {
+  return r.hot.map(x => ({ x, h: S.hot[x.id] })).sort((a, b) => b.h.w - a.h.w).slice(0, 3).sort((a, b) => a.x.at - b.x.at);
+}
 function grouped(h) {
   const m = new Map();
   for (const [n, k] of h.nat) { const l = natLabel(n); m.set(l, (m.get(l) || 0) + k); }
@@ -149,7 +166,9 @@ new ResizeObserver(syncSheetHeight).observe($('#sheet'));
 
 /* ------------------------------------------------------------------ voce */
 function say(t) {
-  if (S.mute || !('speechSynthesis' in window)) return;
+  if (S.mute) return;
+  if (NATIVE) { try { NATIVE.speak(t); } catch (e) { /* la voce è un extra */ } return; }
+  if (!('speechSynthesis' in window)) return;
   try {
     const u = new SpeechSynthesisUtterance(t); u.lang = 'it-IT'; u.rate = 1.05;
     const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.toLowerCase().startsWith('it'));
@@ -327,7 +346,7 @@ $('#tripback').onclick = clearRoutes;
 function setMode(m) {
   S.mode = m;
   document.body.classList.toggle('nav', m === 'nav');
-  const trip = m === 'preview' || m === 'loading' || (m === 'hot' && S.routes);
+  const trip = m === 'preview' || m === 'loading' || m === 'bg' || (m === 'hot' && S.routes);
   $('#pill').hidden = !!trip; $('#trip').hidden = !trip;
   $('#navcard').hidden = m !== 'nav';
   $('#sheet').classList.remove('full');
@@ -344,6 +363,7 @@ function render() {
   else if (S.mode === 'hot') c.innerHTML = hotHtml(S.hot[S.hotId]);
   else if (S.mode === 'about') c.innerHTML = aboutHtml();
   else if (S.mode === 'nav') c.innerHTML = navBarHtml();
+  else if (S.mode === 'bg') c.innerHTML = bgHtml();
   c.scrollTop = 0;
   syncSheetHeight();
 }
@@ -384,12 +404,20 @@ function previewHtml() {
   h += `<div class="actions"><button class="btn primary" type="button" data-act="start">${ICON.nav}Avvia</button>
     <button class="btn tonal" type="button" data-act="sim">${ICON.play}Simula</button>
     <button class="btn ghost" type="button" data-act="gmaps" aria-label="Apri in Google Maps">${ICON.gmaps}</button></div>`;
-  h += `<h3>${r.hot.length ? 'Punti critici sul percorso' : 'Nessun punto critico sul percorso'}</h3>`;
-  for (const x of r.hot) {
-    const p = S.hot[x.id], g = grouped(p)[0];
-    h += `<button class="hrow" type="button" data-hot="${p.id}"><span class="badge ${hclass(p)}">${p.n}</span>
+  const top = top3(r), topIds = new Set(top.map(t => t.h.id));
+  const row = (p, x) => { const g = grouped(p)[0]; return `<button class="hrow" type="button" data-hot="${p.id}"><span class="badge ${hclass(p)}">${p.n}</span>
       <span class="hmain"><b>${esc(hname(p))}</b><span>${p.tw} con due ruote${g ? ' · ' + esc(g[0].toLowerCase()) : ''}</span></span>
-      <span class="hdist">${fmtDist(x.at)}</span></button>`;
+      <span class="hdist">${fmtDist(x.at)}</span></button>`; };
+  if (!r.hot.length) h += '<h3>Nessun punto critico sul percorso</h3>';
+  else {
+    h += `<h3>${top.length === 1 ? 'Il punto da ricordare' : `I ${top.length} punti da ricordare`}</h3>`;
+    for (const t of top) {
+      h += `<button class="keep" type="button" data-hot="${t.h.id}"><span class="badge ${hclass(t.h)}">${t.h.n}</span>
+        <span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(phrase(t.h))}</span></span><span class="hdist">${fmtDist(t.x.at)}</span></button>`;
+    }
+    h += `<p class="note" style="margin:8px 0 0">Durante il viaggio ti avviso a voce solo prima di questi.</p>`;
+    const rest = r.hot.filter(x => !topIds.has(x.id));
+    if (rest.length) { h += `<h3>Altri ${rest.length} punti critici</h3>`; for (const x of rest) h += row(S.hot[x.id], x); }
   }
   h += `<p class="note">Incidenti rilevati dalla Polizia Locale, ${period()} (open data Roma Capitale). Il confronto non tiene conto del traffico.</p>`;
   return h;
@@ -431,8 +459,10 @@ $('#sheetc').onclick = e => {
   else if (a === 'home') setMode('home');
   else if (a === 'hotback') { setMode(S.prev || 'home'); if (S.routes) fit(); else map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 }); }
   else if (a === 'sim') startNav(true);
-  else if (a === 'start') startNav(false);
-  else if (a === 'gmaps') openGmaps();
+  else if (a === 'start') { if (NATIVE) startBackground(); else startNav(false); }
+  else if (a === 'gnav') openGmaps(true);
+  else if (a === 'bgstop') { NATIVE.stopTrip(); setMode('preview'); }
+  else if (a === 'gmaps') openGmaps(false);
   else if (a === 'exit') stopNav();
   else if (a === 'mute') { S.mute = !S.mute; if (S.mute && window.speechSynthesis) speechSynthesis.cancel(); render(); }
 };
@@ -447,11 +477,30 @@ $('#sheetc').onclick = e => {
   });
 })();
 
-function openGmaps() {
+function gmapsUrl(navigate) {
   const r = S.routes[S.sel], c = r.coords, n = c.length;
   const wp = [0.25, 0.5, 0.75].map(f => c[Math.floor(n * f)]).map(p => `${p[1].toFixed(5)},${p[0].toFixed(5)}`).join('|');
-  const u = `https://www.google.com/maps/dir/?api=1&origin=${c[0][1].toFixed(5)},${c[0][0].toFixed(5)}&destination=${c[n - 1][1].toFixed(5)},${c[n - 1][0].toFixed(5)}&waypoints=${encodeURIComponent(wp)}&travelmode=driving`;
-  window.open(u, '_blank');
+  const u = `https://www.google.com/maps/dir/?api=1&origin=${c[0][1].toFixed(5)},${c[0][0].toFixed(5)}&destination=${c[n - 1][1].toFixed(5)},${c[n - 1][0].toFixed(5)}&waypoints=${encodeURIComponent(wp)}&travelmode=driving${navigate ? '&dir_action=navigate' : ''}`;
+  return u;
+}
+function openGmaps(navigate) {
+  const u = gmapsUrl(navigate);
+  if (NATIVE) NATIVE.openMaps(u); else window.open(u, '_blank');
+}
+// App Android: Occhio resta attivo in background e avvisa mentre si usa Google Maps
+function startBackground() {
+  const r = S.routes[S.sel];
+  const alerts = top3(r).map(t => ({ lat: t.h.lat, lon: t.h.lon, name: t.h.s1 || hname(t.h), phrase: phrase(t.h) }));
+  if (!NATIVE.startTrip(JSON.stringify({ alerts }))) return toast('Non riesco ad attivare gli avvisi');
+  setMode('bg');
+  setTimeout(() => openGmaps(true), 500);
+}
+function bgHtml() {
+  const r = S.routes[S.sel], top = top3(r);
+  return `<h2>Occhio è attivo</h2><p class="sub">${top.length ? 'Usa pure Google Maps: ti avviso a voce e con una notifica prima di questi punti.' : 'Nessun punto critico su questo percorso.'}</p>
+    ${top.map(t => `<div class="keep"><span class="badge ${hclass(t.h)}">${t.h.n}</span><span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(phrase(t.h))}</span></span></div>`).join('')}
+    <div class="actions"><button class="btn primary" type="button" data-act="gnav">${ICON.nav}Apri Google Maps</button>
+    <button class="btn danger" type="button" data-act="bgstop">Termina</button></div>`;
 }
 
 /* ------------------------------------------------------------------ viaggio */
@@ -459,7 +508,7 @@ let wakeLock = null, watchId = null;
 function startNav(sim) {
   const r = S.routes[S.sel], cum = [0];
   for (let i = 1; i < r.coords.length; i++) cum.push(cum[i - 1] + distM(r.coords[i - 1], r.coords[i]));
-  S.nav = { sim, r, cum, total: cum[cum.length - 1], s: 0, idx: 0, bearing: null, spoken: new Set(), last: performance.now(), lastUi: 0, v: 0, done: false, key: '' };
+  S.nav = { sim, r, cum, total: cum[cum.length - 1], s: 0, idx: 0, bearing: null, spoken: new Set(), voice: new Set(top3(r).map(t => t.h.id)), last: performance.now(), lastUi: 0, v: 0, done: false, key: '' };
   if (!sim && !navigator.geolocation) return toast('Posizione non disponibile: usa Simula');
   setMode('nav');
   if (!puck) {
@@ -468,7 +517,7 @@ function startNav(sim) {
     puck = new maplibregl.Marker({ element: el.firstChild, rotationAlignment: 'viewport' });
   }
   puck.setLngLat(r.coords[0]).addTo(map);
-  say(`Partiamo. ${r.hot.length ? (r.hot.length === 1 ? 'Un punto critico' : r.hot.length + ' punti critici') + ' sul percorso.' : 'Nessun punto critico sul percorso.'}`);
+  say(r.hot.length ? 'Partiamo. Ti avviso prima dei punti da ricordare.' : 'Partiamo. Nessun punto critico sul percorso.');
   if (navigator.wakeLock) navigator.wakeLock.request('screen').then(w => wakeLock = w).catch(() => {});
   updateNav(true);
   if (sim) requestAnimationFrame(tick);
@@ -547,11 +596,11 @@ function updateNav(force) {
     const g = grouped(h)[0];
     card.className = 'alert';
     card.innerHTML = `<div class="k">Occhio · tra ${fmtDist(d)}</div><div class="name">${esc(hname(h))}</div>
-      <div class="why">${h.n} incidenti, ${h.tw} con due ruote${g ? ' · ' + esc(g[0].toLowerCase()) : ''}<br>${esc(advice(h))}</div>`;
+      <div class="why">${esc(phrase(h).replace(/^./, ch => ch.toUpperCase()))} · ${h.n} incidenti</div>`;
     n.key = 'a' + next.id;
     if (!n.spoken.has(next.id)) {
       n.spoken.add(next.id);
-      say(`Occhio. Tra ${fmtDist(d).replace(' m', ' metri')}, ${hname(h).replace(' / ', ', incrocio con ')}. ${h.n} incidenti. ${advice(h)}`);
+      if (n.voice.has(next.id)) say(`Occhio. ${h.s1 || hname(h)}. ${phrase(h)}.`);
     }
   } else {
     card.className = '';
@@ -574,6 +623,17 @@ function finishNav() {
   say(`Sei arrivato.${cmp}`);
   const eta = $('#eta'); if (eta) eta.innerHTML = '<b>Arrivato</b><span>Tocca Esci per tornare al percorso</span>';
 }
+
+/* tasto indietro di Android: torna true se l'app ha gestito il gesto */
+window.occhioBack = () => {
+  if (!$('#search').hidden) { closeSearch(); return true; }
+  if (S.mode === 'nav') { stopNav(); return true; }
+  if (S.mode === 'hot') { setMode(S.prev || 'home'); if (S.routes) fit(); return true; }
+  if (S.mode === 'about') { setMode('home'); return true; }
+  if (S.mode === 'bg') { setMode('preview'); return true; }
+  if (S.mode === 'preview') { clearRoutes(); return true; }
+  return false;
+};
 
 /* avvio */
 render();
