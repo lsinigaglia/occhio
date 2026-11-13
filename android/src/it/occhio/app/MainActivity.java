@@ -57,6 +57,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setGeolocationEnabled(true);
+        s.setMediaPlaybackRequiresUserGesture(false);   // le clip degli avvisi partono da sole
 
         web.setWebViewClient(new WebViewClient() {
             @Override

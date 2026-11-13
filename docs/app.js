@@ -140,14 +140,55 @@ function advice(h) {
   return a;
 }
 // mezza frase da dire mentre si guida
-function phrase(h) {
+const PHRASES = {
+  ped: 'attenzione agli attraversamenti pedonali', lat: 'attenzione a chi svolta o si immette', tamp: 'tieni la distanza',
+  sosta: 'attenzione a portiere e doppie file', fondo: 'fondo insidioso, rallenta', rallenta: 'rallenta',
+};
+function phraseKey(h) {
   const s = (h.nat[0] ? h.nat[0][0] : '').toLowerCase();
-  if (s.includes('pedone')) return 'attenzione agli attraversamenti pedonali';
-  if (s.includes('laterale')) return 'attenzione a chi svolta o si immette';
-  if (s.includes('tamponamento')) return 'tieni la distanza';
-  if (s.includes('sosta') || s.includes('fermo')) return 'attenzione a portiere e doppie file';
-  if (s.includes('ostacolo') || s.includes('fuoriuscita') || s.includes('caduta') || s.includes('buche')) return 'fondo insidioso, rallenta';
+  if (s.includes('pedone')) return 'ped';
+  if (s.includes('laterale')) return 'lat';
+  if (s.includes('tamponamento')) return 'tamp';
+  if (s.includes('sosta') || s.includes('fermo')) return 'sosta';
+  if (s.includes('ostacolo') || s.includes('fuoriuscita') || s.includes('caduta') || s.includes('buche')) return 'fondo';
   return 'rallenta';
+}
+const phrase = h => PHRASES[phraseKey(h)];
+
+// Avvisi con voce registrata (ElevenLabs): "Occhio" + nome della strada + mezza frase.
+// audio/index.json dice quali clip esistono; dove ne manca una parla la voce del telefono.
+let CLIPS = null;
+fetch('audio/index.json').then(r => r.ok ? r.json() : null)
+  .then(j => { if (j) CLIPS = { names: new Set(j.names), phrases: new Set(j.phrases) }; }).catch(() => {});
+const slug = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+function alertClips(h) {
+  if (!CLIPS || !h.s1) return null;
+  const n = slug(h.s1), p = phraseKey(h);
+  if (!CLIPS.names.has(n) || !CLIPS.phrases.has(p)) return null;
+  return ['audio/occhio.mp3', `audio/n/${n}.mp3`, `audio/p/${p}.mp3`];
+}
+const player = new Audio();
+// i browser lasciano partire l'audio solo dopo un tocco: lo si sblocca al tocco su Avvia o Simula
+function unlockAudio() {
+  if (!CLIPS) return;
+  try {
+    player.muted = true; player.src = 'audio/occhio.mp3';
+    const p = player.play();
+    if (p) p.then(() => { player.pause(); player.muted = false; }).catch(() => { player.muted = false; });
+  } catch (e) { /* si userà la voce del telefono */ }
+}
+function sayAlert(h) {
+  if (S.mute) return;
+  const text = `Occhio. ${h.s1 || hname(h)}. ${phrase(h)}.`, clips = alertClips(h);
+  if (!clips) return say(text);
+  let i = 0;
+  const fail = () => { player.onended = null; player.onerror = null; say(text); };
+  const next = () => {
+    if (i >= clips.length) { player.onended = null; return; }
+    player.muted = false; player.src = clips[i++]; player.onended = next; player.onerror = fail;
+    const p = player.play(); if (p) p.catch(fail);
+  };
+  next();
 }
 // i tre punti peggiori del tragitto, nell'ordine in cui si incontrano
 function top3(r) {
@@ -205,8 +246,8 @@ const myPlace = () => S.pos && inBox(S.pos.lat, S.pos.lon) ? { name: 'La tua pos
 
 /* ------------------------------------------------------------------ ricerca */
 const EXAMPLES = [
+  { a: { name: 'Caffè Tevere, Largo Marzi', lat: 41.87602, lon: 12.47153 }, b: { name: 'San Saba', lat: 41.87898, lon: 12.48838 } },
   { a: { name: 'Monteverde, Piazza San Giovanni di Dio', lat: 41.8748, lon: 12.4471 }, b: { name: 'San Giovanni in Laterano', lat: 41.8859, lon: 12.5057 } },
-  { a: { name: 'Prati, Piazza Cavour', lat: 41.9057, lon: 12.4699 }, b: { name: 'Pigneto, Via del Pigneto', lat: 41.8895, lon: 12.5285 } },
   { a: { name: 'EUR, Viale Europa', lat: 41.8312, lon: 12.4667 }, b: { name: 'Stazione Termini', lat: 41.9009, lon: 12.5020 } },
 ];
 let searchSeq = 0, searchT, abortC;
@@ -490,7 +531,7 @@ $('#sheetc').onclick = e => {
   else if (a === 'exit') stopNav();
   else if (a === 'mute') {
     S.mute = !S.mute;
-    if (S.mute) { if (NATIVE) NATIVE.speak(''); else if (window.speechSynthesis) speechSynthesis.cancel(); }
+    if (S.mute) { player.pause(); if (NATIVE) NATIVE.speak(''); else if (window.speechSynthesis) speechSynthesis.cancel(); }
     render();
     if (S.nav) { if (S.nav.done) { const e = $('#eta'); if (e) e.innerHTML = '<b>Arrivato</b><span>Tocca Esci per tornare al percorso</span>'; } else updateNav(true); }
   }
@@ -519,7 +560,10 @@ function openGmaps(navigate) {
 // App Android: Occhio resta attivo in background e avvisa mentre si usa Google Maps
 function startBackground() {
   const r = S.routes[S.sel];
-  const alerts = top3(r).map(t => ({ lat: t.h.lat, lon: t.h.lon, name: t.h.s1 || hname(t.h), phrase: phrase(t.h) }));
+  const alerts = top3(r).map(t => ({
+    lat: t.h.lat, lon: t.h.lon, name: t.h.s1 || hname(t.h), phrase: phrase(t.h),
+    clips: (alertClips(t.h) || []).map(u => new URL(u, location.href).href),
+  }));
   if (!alerts.length) { toast('Nessun punto critico su questo percorso'); return openGmaps(true); }
   if (!NATIVE.startTrip(JSON.stringify({ alerts }))) return toast('Consenti la posizione precisa a Occhio, poi tocca di nuovo Avvia');
   setMode('bg');
@@ -549,6 +593,8 @@ function startNav(sim) {
     puck = new maplibregl.Marker({ element: el.firstChild, rotationAlignment: 'viewport' });
   }
   puck.setLngLat(r.coords[0]).addTo(map);
+  unlockAudio();
+  for (const t of top3(r)) for (const u of alertClips(t.h) || []) fetch(u).catch(() => {});   // le clip sono già scaricate quando servono
   say(r.hot.length ? 'Partiamo. Ti avviso prima dei punti da ricordare.' : 'Partiamo. Nessun punto critico sul percorso.');
   if (navigator.wakeLock) navigator.wakeLock.request('screen').then(w => wakeLock = w).catch(() => {});
   updateNav(true);
@@ -604,6 +650,7 @@ function stopNav() {
   keepAwake(false);
   if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  player.pause();
   if (window.speechSynthesis) speechSynthesis.cancel();
   if (puck) puck.remove();
   S.nav = null;
@@ -681,7 +728,7 @@ function updateNav(force) {
       html += `<div class="occ"><b>Occhio · tra ${fmtDist(d)}</b>${esc(h.s1 || hname(h))} — ${esc(phrase(h))}</div>`;
       if (!n.spoken.has(next.id)) {
         n.spoken.add(next.id);
-        if (n.voice.has(next.id)) say(`Occhio. ${h.s1 || hname(h)}. ${phrase(h)}.`);
+        if (n.voice.has(next.id)) sayAlert(h);
       }
     }
   }

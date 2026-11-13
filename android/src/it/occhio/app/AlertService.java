@@ -17,6 +17,7 @@ import android.location.LocationManager;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -29,6 +30,12 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -48,6 +55,8 @@ public class AlertService extends Service implements LocationListener {
     private static class Alert {
         double lat, lon;
         String name, phrase;
+        String[] clips;            // indirizzi delle clip registrate (può essere vuoto)
+        volatile File[] files;     // le stesse clip, scaricate sul telefono
         boolean done;
         float last = Float.NaN;
     }
@@ -65,6 +74,8 @@ public class AlertService extends Service implements LocationListener {
     private boolean ttsReady;
     private int fired;
     private int shownLeft = -1;
+    private final ArrayDeque<File> queue = new ArrayDeque<>();
+    private MediaPlayer player;
     private BroadcastReceiver debugReceiver;
 
     @Override
@@ -158,6 +169,9 @@ public class AlertService extends Service implements LocationListener {
                 a.lon = o.getDouble("lon");
                 a.name = o.getString("name");
                 a.phrase = o.optString("phrase", "");
+                JSONArray cl = o.optJSONArray("clips");
+                a.clips = new String[cl == null ? 0 : cl.length()];
+                for (int k = 0; k < a.clips.length; k++) a.clips[k] = cl.getString(k);
                 alerts.add(a);
             }
         } catch (Exception e) {
@@ -179,6 +193,8 @@ public class AlertService extends Service implements LocationListener {
             stopSelf();
         }
         Log.i(TAG, "avvisi attivi: " + alerts.size());
+        final List<Alert> toFetch = new ArrayList<>(alerts);
+        new Thread(() -> fetchClips(toFetch)).start();
         return START_NOT_STICKY;
     }
 
@@ -225,8 +241,77 @@ public class AlertService extends Service implements LocationListener {
                 .setContentIntent(openApp())
                 .build();
         nm.notify(100 + fired++, n);
-        speak("Occhio. " + a.name + ". " + a.phrase);
+        if (!playClips(a)) speak("Occhio. " + a.name + ". " + a.phrase);
         Log.i(TAG, "avviso: " + text + " a " + m + " m");
+    }
+
+    /** Scarica le clip registrate alla partenza, così all'avviso sono già sul telefono. */
+    private void fetchClips(List<Alert> list) {
+        for (Alert a : list) {
+            if (a.clips.length == 0) continue;
+            File[] files = new File[a.clips.length];
+            boolean ok = true;
+            for (int i = 0; i < a.clips.length && ok; i++) {
+                File f = new File(getCacheDir(), "clip_" + Integer.toHexString(a.clips[i].hashCode()) + ".mp3");
+                if (!f.exists() || f.length() == 0) ok = download(a.clips[i], f);
+                files[i] = f;
+            }
+            if (ok) a.files = files;
+        }
+        Log.i(TAG, "clip vocali pronte");
+    }
+
+    private boolean download(String url, File out) {
+        File tmp = new File(out.getPath() + ".tmp");
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(8000);
+            if (c.getResponseCode() != 200) return false;
+            try (InputStream in = c.getInputStream(); FileOutputStream os = new FileOutputStream(tmp)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+            }
+            return tmp.renameTo(out);
+        } catch (Exception e) {
+            Log.w(TAG, "clip non scaricata: " + url);
+            tmp.delete();
+            return false;
+        }
+    }
+
+    /** Riproduce le clip dell'avviso una dopo l'altra. Ritorna false se non sono disponibili. */
+    private boolean playClips(Alert a) {
+        File[] files = a.files;
+        if (files == null) return false;
+        for (File f : files) if (!f.exists()) return false;
+        for (File f : files) queue.add(f);
+        if (player == null) playNext();
+        return true;
+    }
+
+    private void playNext() {
+        File f = queue.poll();
+        if (f == null) {
+            player = null;
+            audio.abandonAudioFocusRequest(focus);
+            return;
+        }
+        try {
+            MediaPlayer mp = new MediaPlayer();
+            mp.setAudioAttributes(voiceAttrs);
+            mp.setDataSource(f.getAbsolutePath());
+            mp.setOnCompletionListener(m -> { m.release(); playNext(); });
+            mp.setOnErrorListener((m, what, extra) -> { m.release(); playNext(); return true; });
+            mp.prepare();
+            audio.requestAudioFocus(focus);
+            mp.start();
+            player = mp;
+        } catch (Exception e) {
+            Log.w(TAG, "clip non riproducibile", e);
+            playNext();
+        }
     }
 
     private void speak(String text) {
@@ -270,6 +355,8 @@ public class AlertService extends Service implements LocationListener {
         } catch (Exception ignored) { }
         if (debugReceiver != null) unregisterReceiver(debugReceiver);
         if (tts != null) tts.shutdown();
+        queue.clear();
+        if (player != null) { try { player.release(); } catch (Exception ignored) { } player = null; }
         stopForeground(true);
         super.onDestroy();
     }

@@ -2,3 +2,4 @@ data/raw/
 __pycache__/
 *.pyc
 docs/_phone.html
+.env
