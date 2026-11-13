@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#ffffff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Occhio — percorsi con meno punti critici a Roma</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+
+<!-- barra di ricerca (home) e riepilogo tragitto (anteprima) -->
+<div id="top">
+  <button id="pill" class="pill" type="button">
+    <svg viewBox="0 0 24 24" class="ic"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>
+    <span id="pilltext">Dove vai?</span>
+  </button>
+  <div id="trip" class="trip" hidden>
+    <button id="tripback" class="iconbtn" type="button" aria-label="Chiudi">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>
+    </button>
+    <button id="tripedit" class="tripedit" type="button">
+      <span class="tl"><i class="o"></i><span id="tfrom"></span></span>
+      <span class="tl"><i class="d"></i><span id="tto"></span></span>
+    </button>
+  </div>
+</div>
+
+<button id="locate" class="fab" type="button" aria-label="La mia posizione">
+  <svg viewBox="0 0 24 24" class="ic"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.9 3A9 9 0 0 0 13 3.1V1h-2v2.1A9 9 0 0 0 3.100 11H1v2h2.100A9 9 0 0 0 11 20.900V23h2v-2.100A9 9 0 0 0 20.900 13H23v-2h-2.100zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>
+</button>
+
+<!-- avviso durante il viaggio -->
+<div id="navcard" hidden></div>
+
+<!-- pannello in basso -->
+<div id="sheet">
+  <div id="handle"><span></span></div>
+  <div id="sheetc"></div>
+</div>
+
+<!-- ricerca a tutto schermo -->
+<div id="search" hidden>
+  <div class="shead">
+    <button id="sback" class="iconbtn" type="button" aria-label="Indietro">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>
+    </button>
+    <div class="fields">
+      <label class="f"><i class="o"></i><input id="ifrom" type="text" placeholder="Partenza" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search"></label>
+      <label class="f"><i class="d"></i><input id="ito" type="text" placeholder="Dove vai?" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search"></label>
+    </div>
+    <button id="swap" class="iconbtn" type="button" aria-label="Inverti">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M16 17V10h-2v7h-3l4 4 4-4h-3zM9 3 5 7h3v7h2V7h3L9 3z"/></svg>
+    </button>
+  </div>
+  <div id="results"></div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
