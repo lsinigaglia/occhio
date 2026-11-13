@@ -6,6 +6,8 @@ let G, HOT, N, E;
 let latD, lonD, deg, okNode;
 let off, eFrom, eTo, eSeg, eFwd, eTime, eRisk, eInc;
 const segHot = new Map();
+const banned = new Set();   // coppie (tratto in arrivo, tratto in uscita) vietate
+let M = 0;
 const nodeGrid = new Map();
 let streets = [];
 
@@ -38,7 +40,7 @@ async function init() {
   }
   off = new Int32Array(N + 1);
   for (let i = 0; i < N; i++) off[i + 1] = off[i] + cnt[i];
-  const M = off[N], pos = off.slice(0, N);
+  M = off[N]; const pos = off.slice(0, N);
   eFrom = new Int32Array(M); eTo = new Int32Array(M); eSeg = new Int32Array(M); eFwd = new Uint8Array(M);
   eTime = new Float32Array(M); eRisk = new Float32Array(M); eInc = new Uint16Array(M);
   const add = (u, v, i, fwd) => {
@@ -51,6 +53,15 @@ async function init() {
   for (let i = 0; i < E; i++) {
     add(G.a[i], G.b[i], i, 1);
     if (!G.ow[i]) add(G.b[i], G.a[i], i, 0);
+  }
+  // divieti di svolta: (tratto di provenienza, nodo, tratto vietato)
+  const B = G.ban || [];
+  for (let i = 0; i < B.length; i += 3) {
+    const f = B[i], v = B[i + 1], x = B[i + 2], u = G.a[f] === v ? G.b[f] : G.a[f];
+    let e1 = -1, e2 = -1;
+    for (let e = off[u]; e < off[u + 1]; e++) if (eSeg[e] === f && eTo[e] === v) e1 = e;
+    for (let e = off[v]; e < off[v + 1]; e++) if (eSeg[e] === x && (x !== f || eTo[e] === u)) e2 = e;
+    if (e1 >= 0 && e2 >= 0) banned.add(e1 * M + e2);
   }
   for (let i = 0; i < N; i++) {
     const k = Math.floor(latD[i] / GC) * 100000 + Math.floor(lonD[i] / GC);
@@ -119,6 +130,49 @@ function nearest(lat, lon) {
   }
   return { node: best, dist: bd };
 }
+
+// Ricerca del percorso "da tratto a tratto": serve per rispettare i divieti di svolta,
+// che dipendono dalla strada da cui si arriva. Niente inversioni a metà strada.
+function dijkstraTurns(src, dst, beta) {
+  const dist = new Float64Array(M).fill(Infinity), prev = new Int32Array(M).fill(-1);
+  const hk = [], hv = [];
+  const push = (k, e) => {
+    let i = hk.length; hk.push(k); hv.push(e);
+    while (i > 0) { const p = (i - 1) >> 1; if (hk[p] <= k) break; hk[i] = hk[p]; hv[i] = hv[p]; i = p; }
+    hk[i] = k; hv[i] = e;
+  };
+  for (let e = off[src]; e < off[src + 1]; e++) { dist[e] = eTime[e] + beta * eRisk[e]; push(dist[e], e); }
+  let found = -1;
+  while (hk.length) {
+    const d = hk[0], e = hv[0], lk = hk.pop(), lv = hv.pop();
+    if (hk.length) {
+      let i = 0; const n = hk.length;
+      for (;;) {
+        let c = 2 * i + 1; if (c >= n) break;
+        if (c + 1 < n && hk[c + 1] < hk[c]) c++;
+        if (hk[c] >= lk) break;
+        hk[i] = hk[c]; hv[i] = hv[c]; i = c;
+      }
+      hk[i] = lk; hv[i] = lv;
+    }
+    if (d > dist[e]) continue;
+    const v = eTo[e];
+    if (v === dst) { found = e; break; }
+    const deadEnd = off[v + 1] - off[v] === 1;
+    for (let e2 = off[v]; e2 < off[v + 1]; e2++) {
+      if (banned.has(e * M + e2)) continue;
+      if (!deadEnd && eSeg[e2] === eSeg[e] && eTo[e2] === eFrom[e]) continue;
+      const nd = d + eTime[e2] + beta * eRisk[e2];
+      if (nd < dist[e2]) { dist[e2] = nd; prev[e2] = e; push(nd, e2); }
+    }
+  }
+  if (found < 0) return null;
+  const edges = [];
+  for (let e = found; e >= 0; e = prev[e]) edges.push(e);
+  return edges.reverse();
+}
+// se i divieti rendono irraggiungibile la destinazione, si torna alla ricerca semplice
+const findPath = (a, b, beta) => dijkstraTurns(a, b, beta) || dijkstra(a, b, beta);
 
 function dijkstra(src, dst, beta) {
   const dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1);
@@ -267,7 +321,7 @@ function route(from, to) {
   const a = nearest(from[1], from[0]), b = nearest(to[1], to[0]);
   if (a.node < 0 || b.node < 0 || a.dist > 1500 || b.dist > 1500) return { error: 'fuori' };
   if (a.node === b.node) return { error: 'vicino' };
-  const fe = dijkstra(a.node, b.node, 0);
+  const fe = findPath(a.node, b.node, 0);
   if (!fe) return { error: 'nessuno' };
   const fast = describe(fe);
   // Il percorso prudente è quello con meno incidenti registrati e meno punti critici,
@@ -275,7 +329,7 @@ function route(from, to) {
   const score = r => r.inc + 6 * r.hot.length;
   let safe = null;
   for (const beta of [0.3, 0.6, 1, 2, 4, 8, 16]) {
-    const e = dijkstra(a.node, b.node, beta); if (!e) continue;
+    const e = findPath(a.node, b.node, beta); if (!e) continue;
     const r = describe(e);
     if (r.time > fast.time * 1.3 + 60 || r.dist > fast.dist * 1.4 + 300) continue;
     if (r.hot.length > fast.hot.length) continue;

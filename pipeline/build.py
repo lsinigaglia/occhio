@@ -88,7 +88,7 @@ def build_segments(nodes, ways):
             if use[n] >= 2:
                 if cur[0] != cur[-1] and len(cur) >= 2:
                     g = cur if d >= 0 else cur[::-1]
-                    segs.append({'nd': g, 'cls': CLS_IDX[hw], 'name': name, 'ow': 1 if d != 0 else 0, 'rb': rb})
+                    segs.append({'nd': g, 'cls': CLS_IDX[hw], 'name': name, 'ow': 1 if d != 0 else 0, 'rb': rb, 'way': w['id']})
                 cur = [n]
     return segs
 
@@ -144,6 +144,54 @@ def largest_scc(segs):
     best = max(range(len(sizes)), key=lambda c: sizes[c])
     keep = [s for s in segs if comp[ids[s['nd'][0]]] == best and comp[ids[s['nd'][-1]]] == best]
     return keep, N, sizes[best]
+
+
+def load_bans(segs, nid):
+    """Divieti di svolta di OpenStreetMap (relazioni type=restriction con un nodo come "via").
+
+    Ritorna terne (tratto di provenienza, nodo, tratto vietato). "only_*" diventa il divieto
+    di tutte le altre uscite da quel nodo. I divieti con "via" su una strada (pochi) sono ignorati.
+    """
+    path = os.path.join(RAW_OSM, 'restrictions.json')
+    if not os.path.exists(path):
+        return []
+    by_way_node = collections.defaultdict(list)
+    at_node = collections.defaultdict(list)
+    for i, s in enumerate(segs):
+        for n in (s['nd'][0], s['nd'][-1]):
+            by_way_node[(s['way'], n)].append(i)
+            at_node[n].append(i)
+    with open(path, encoding='utf-8') as fh:
+        rels = json.load(fh)['elements']
+    bans = set()
+    for r in rels:
+        t = r.get('tags', {})
+        kind = t.get('restriction', '')
+        if not (kind.startswith('no_') or kind.startswith('only_')) or kind in ('no_parking', 'no_entry'):
+            continue
+        if any(k in t.get('except', '') for k in ('motorcycle', 'moped', 'motor_vehicle')):
+            continue
+        fr = [m['ref'] for m in r['members'] if m['role'] == 'from' and m['type'] == 'way']
+        to = [m['ref'] for m in r['members'] if m['role'] == 'to' and m['type'] == 'way']
+        via = [m['ref'] for m in r['members'] if m['role'] == 'via' and m['type'] == 'node']
+        if len(via) != 1 or not fr or not to or via[0] not in nid:
+            continue
+        v = via[0]
+        fsegs = [i for w in fr for i in by_way_node.get((w, v), [])]
+        tsegs = {i for w in to for i in by_way_node.get((w, v), [])}
+        if not fsegs or not tsegs:
+            continue
+        same = set(fr) == set(to)
+        for f in fsegs:
+            if kind.startswith('no_'):
+                for x in tsegs:
+                    if not same or x == f:      # stessa strada: è vietata solo l'inversione
+                        bans.add((f, nid[v], x))
+            else:
+                for x in at_node[v]:
+                    if x not in tsegs and x != f:
+                        bans.add((f, nid[v], x))
+    return sorted(bans)
 
 
 # ---------------------------------------------------------------- incidenti
@@ -268,6 +316,8 @@ def main():
         s['pts'] = pts
         s['len'] = sum(math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) for i in range(len(pts) - 1))
         s['risk'] = 0.0; s['n'] = 0
+    bans = load_bans(segs, nid)
+    print('divieti di svolta applicati', len(bans))
 
     # griglia spaziale dei pezzi di tratto
     grid = collections.defaultdict(list)
@@ -406,6 +456,7 @@ def main():
         'len': [round(s['len']) for s in segs], 'cls': [s['cls'] for s in segs],
         'risk': [round(s['risk'] * 10) for s in segs], 'cnt': [s['n'] for s in segs],
         'name': [nidx[s['name']] for s in segs], 'names': names,
+        'ban': [x for b in bans for x in b],
         'geom': geom, 'goff': goff,
     }
     os.makedirs(OUT, exist_ok=True)
