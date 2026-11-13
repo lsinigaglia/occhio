@@ -60,7 +60,7 @@ let meMarker, fromMarker, toMarker, puck;
 const mapReady = new Promise(res => map.on('load', res));
 const dataReady = call('init');
 
-Promise.all([mapReady, dataReady]).then(([, d]) => {
+const appReady = Promise.all([mapReady, dataReady]).then(([, d]) => {
   S.hot = d.hotspots; S.meta = d.meta; S.ready = true;
   for (const id of ['fast', 'safe']) {
     map.addSource('r-' + id, { type: 'geojson', data: empty });
@@ -93,7 +93,8 @@ Promise.all([mapReady, dataReady]).then(([, d]) => {
       if (best) best.nota = n;
     }
   }).catch(() => {});
-}).catch(err => { $('#sheetc').innerHTML = `<p class="sub">Non riesco a caricare i dati. Ricarica la pagina.</p><p class="note">${esc(err.message)}</p>`; });
+});
+appReady.catch(err => { $('#sheetc').innerHTML = `<p class="sub">Non riesco a caricare i dati. Ricarica la pagina.</p><p class="note">${esc(err.message)}</p>`; });
 
 /* ------------------------------------------------------------------ utilità */
 const fmtMin = s => Math.max(1, Math.round(s / 60)) + ' min';
@@ -272,8 +273,10 @@ async function go() {
   setMode('loading');
   $('#tfrom').textContent = S.from.name; $('#tto').textContent = S.to.name;
   let r;
-  try { r = await call('route', { from: [S.from.lon, S.from.lat], to: [S.to.lon, S.to.lat] }); }
-  catch (e) { r = { error: 'errore' }; }
+  try {
+    await appReady;   // se la mappa non ha ancora finito di caricarsi, aspetta
+    r = await call('route', { from: [S.from.lon, S.from.lat], to: [S.to.lon, S.to.lat] });
+  } catch (e) { r = { error: 'errore' }; }
   if (r.error) {
     toast({ fuori: 'Partenza o arrivo fuori dall\'area coperta (Roma, dentro il raccordo)', vicino: 'Partenza e arrivo sono troppo vicini', nessuno: 'Non trovo un percorso tra questi due punti' }[r.error] || 'Qualcosa è andato storto, riprova');
     S.routes = null; return setMode('home');
