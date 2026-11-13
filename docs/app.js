@@ -526,9 +526,9 @@ function startBackground() {
 function bgHtml() {
   const r = S.routes[S.sel], top = top3(r);
   return `<h2>Occhio è attivo</h2><p class="sub">${top.length ? 'Usa pure Google Maps: ti avviso a voce e con una notifica prima di questi punti.' : 'Nessun punto critico su questo percorso.'}</p>
-    ${top.map(t => `<div class="keep"><span class="badge ${hclass(t.h)}">${t.h.n}</span><span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(phrase(t.h))}</span></span></div>`).join('')}
-    <div class="actions"><button class="btn primary" type="button" data-act="gnav">${ICON.nav}Apri Google Maps</button>
-    <button class="btn danger" type="button" data-act="bgstop">Termina</button></div>`;
+    <div class="actions" style="margin-bottom:4px"><button class="btn primary" type="button" data-act="gnav">${ICON.nav}Apri Google Maps</button>
+    <button class="btn danger" type="button" data-act="bgstop">Termina</button></div>
+    ${top.map(t => `<div class="keep"><span class="badge ${hclass(t.h)}">${t.h.n}</span><span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(phrase(t.h))}</span></span></div>`).join('')}`;
 }
 
 /* ------------------------------------------------------------------ viaggio */
