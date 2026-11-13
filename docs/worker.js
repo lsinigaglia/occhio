@@ -157,10 +157,81 @@ function dijkstra(src, dst, beta) {
   return edges.reverse();
 }
 
+const brg = (lo1, la1, lo2, la2) => Math.atan2((lo2 - lo1) * MX, (la2 - la1) * MY) * 180 / Math.PI;
+const turnAngle = (a, b) => ((b - a + 540) % 360) - 180;   // positivo = verso destra
+
+function edgePts(e) {
+  const s = eSeg[e], u = eFrom[e], v = eTo[e], pts = [[lonD[u], latD[u]]];
+  const g0 = G.goff[s], g1 = G.goff[s + 1];
+  if (eFwd[e]) for (let k = g0; k < g1; k += 2) pts.push([G.geom[k + 1] / 1e5, G.geom[k] / 1e5]);
+  else for (let k = g1 - 2; k >= g0; k -= 2) pts.push([G.geom[k + 1] / 1e5, G.geom[k] / 1e5]);
+  pts.push([lonD[v], latD[v]]);
+  return pts;
+}
+// direzione all'inizio e alla fine di un tratto, misurata su una quindicina di metri
+function headIn(p) {
+  let i = 1, d = distM(p[0][1], p[0][0], p[1][1], p[1][0]);
+  while (d < 15 && i < p.length - 1) { i++; d += distM(p[i - 1][1], p[i - 1][0], p[i][1], p[i][0]); }
+  return brg(p[0][0], p[0][1], p[i][0], p[i][1]);
+}
+function headOut(p) {
+  const n = p.length - 1;
+  let i = n - 1, d = distM(p[n][1], p[n][0], p[i][1], p[i][0]);
+  while (d < 15 && i > 0) { i--; d += distM(p[i + 1][1], p[i + 1][0], p[i][1], p[i][0]); }
+  return brg(p[i][0], p[i][1], p[n][0], p[n][1]);
+}
+
+// Manovre lungo il percorso: svolte, rotatorie, bivi dove bisogna tenersi da un lato, arrivo.
+function maneuvers(info) {
+  const steps = [];
+  for (let i = 1; i < info.length; i++) {
+    const p = info[i - 1], c = info[i], v = eFrom[c.e], at = Math.round(p.end);
+    if (G.rb[c.s] && !G.rb[p.s]) {
+      let exit = 1, j = i;
+      while (j < info.length && G.rb[info[j].s]) {
+        const node = eTo[info[j].e], last = j + 1 >= info.length || !G.rb[info[j + 1].s];
+        if (!last) for (let e2 = off[node]; e2 < off[node + 1]; e2++) if (!G.rb[eSeg[e2]]) exit++;
+        j++;
+      }
+      const out = info[j];
+      steps.push({ at, type: 'rb', exit, name: out ? G.names[G.name[out.s]] || '' : '' });
+      i = j;   // l'uscita dalla rotatoria fa parte della stessa manovra
+      continue;
+    }
+    if (G.rb[c.s] || deg[v] < 3) continue;
+    const a = turnAngle(p.bOut, c.bIn), abs = Math.abs(a);
+    let type = null;
+    if (abs >= 155) type = 'uturn';
+    else if (abs >= 100) type = 'sharp';
+    else if (abs >= 40) type = 'turn';
+    else if (abs >= 14) {
+      // se un'altra strada prosegue più dritta, va detto da che parte tenersi
+      for (let e2 = off[v]; e2 < off[v + 1]; e2++) {
+        if (e2 === c.e || eTo[e2] === eFrom[p.e]) continue;
+        if (Math.abs(turnAngle(p.bOut, headIn(edgePts(e2)))) < abs - 6) { type = 'keep'; break; }
+      }
+    }
+    if (!type) continue;
+    steps.push({ at, type, dir: a > 0 ? 'right' : 'left', angle: Math.round(a), name: G.names[G.name[c.s]] || '' });
+  }
+  // due svolte dallo stesso lato a pochi metri l'una dall'altra sono una manovra sola
+  const merged = [];
+  for (const st of steps) {
+    const q = merged[merged.length - 1];
+    if (q && st.at - q.at < 35 && q.dir === st.dir && q.type !== 'rb' && st.type !== 'rb') {
+      q.angle += st.angle; q.name = st.name || q.name;
+      const abs = Math.abs(q.angle);
+      q.type = abs >= 155 ? 'uturn' : abs >= 100 ? 'sharp' : abs >= 40 ? 'turn' : 'keep';
+    } else merged.push(st);
+  }
+  merged.push({ at: Math.round(info[info.length - 1].end), type: 'arrive' });
+  return merged;
+}
+
 function describe(edges) {
   const coords = [], cum = [];
   let time = 0, len = 0, inc = 0, risk = 0, run = 0;
-  const nameLen = new Map(), cand = new Set();
+  const nameLen = new Map(), cand = new Set(), info = [];
   const push = (lo, la) => {
     if (coords.length) {
       const p = coords[coords.length - 1];
@@ -170,12 +241,9 @@ function describe(edges) {
     coords.push([lo, la]); cum.push(run);
   };
   for (const e of edges) {
-    const s = eSeg[e], u = eFrom[e], v = eTo[e];
-    push(lonD[u], latD[u]);
-    const g0 = G.goff[s], g1 = G.goff[s + 1];
-    if (eFwd[e]) for (let k = g0; k < g1; k += 2) push(G.geom[k + 1] / 1e5, G.geom[k] / 1e5);
-    else for (let k = g1 - 2; k >= g0; k -= 2) push(G.geom[k + 1] / 1e5, G.geom[k] / 1e5);
-    push(lonD[v], latD[v]);
+    const s = eSeg[e], pts = edgePts(e);
+    for (const q of pts) push(q[0], q[1]);
+    info.push({ e, s, end: run, bIn: headIn(pts), bOut: headOut(pts) });
     time += eTime[e]; len += G.len[s]; inc += eInc[e]; risk += eRisk[e];
     if (G.name[s]) nameLen.set(G.name[s], (nameLen.get(G.name[s]) || 0) + G.len[s]);
     const hs = segHot.get(s); if (hs) for (const h of hs) cand.add(h);
@@ -192,7 +260,7 @@ function describe(edges) {
   }
   hot.sort((a, b) => a.at - b.at);
   const via = [...nameLen.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(x => G.names[x[0]]);
-  return { coords, time: Math.round(time), dist: Math.round(len), inc, risk: Math.round(risk), hot, via, key: edges.length + ':' + Math.round(len) };
+  return { coords, time: Math.round(time), dist: Math.round(len), inc, risk: Math.round(risk), hot, via, steps: maneuvers(info), key: edges.length + ':' + Math.round(len) };
 }
 
 function route(from, to) {

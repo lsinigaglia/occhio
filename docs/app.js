@@ -423,7 +423,8 @@ function previewHtml() {
   }
   h += `<div class="actions"><button class="btn primary" type="button" data-act="start">${ICON.nav}Avvia</button>
     <button class="btn tonal" type="button" data-act="sim">${ICON.play}Simula</button>
-    <button class="btn ghost" type="button" data-act="gmaps" aria-label="Apri in Google Maps">${ICON.gmaps}</button></div>`;
+    ${NATIVE ? '' : `<button class="btn ghost" type="button" data-act="gmaps" aria-label="Apri in Google Maps">${ICON.gmaps}</button>`}</div>`;
+  if (NATIVE) h += `<div class="actions" style="margin-top:8px"><button class="btn ghost" style="flex:1" type="button" data-act="bgstart">${ICON.gmaps}Usa Google Maps con gli avvisi di Occhio</button></div>`;
   const top = top3(r), topIds = new Set(top.map(t => t.h.id));
   const row = (p, x) => { const g = grouped(p)[0]; return `<button class="hrow" type="button" data-hot="${p.id}"><span class="badge ${hclass(p)}">${p.n}</span>
       <span class="hmain"><b>${esc(hname(p))}</b><span>${p.tw} con due ruote${g ? ' · ' + esc(g[0].toLowerCase()) : ''}</span></span>
@@ -481,7 +482,8 @@ $('#sheetc').onclick = e => {
   else if (a === 'home') setMode('home');
   else if (a === 'hotback') { setMode(S.prev || 'home'); if (S.routes) fit(); else map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 }); }
   else if (a === 'sim') startNav(true);
-  else if (a === 'start') { if (NATIVE) startBackground(); else startNav(false); }
+  else if (a === 'start') startNav(false);
+  else if (a === 'bgstart') startBackground();
   else if (a === 'gnav') openGmaps(true);
   else if (a === 'bgstop') { NATIVE.stopTrip(); setMode('preview'); }
   else if (a === 'gmaps') openGmaps(false);
@@ -536,9 +538,11 @@ let wakeLock = null, watchId = null;
 function startNav(sim) {
   const r = S.routes[S.sel], cum = [0];
   for (let i = 1; i < r.coords.length; i++) cum.push(cum[i - 1] + distM(r.coords[i - 1], r.coords[i]));
-  S.nav = { sim, r, cum, total: cum[cum.length - 1], s: 0, idx: 0, bearing: null, spoken: new Set(), voice: new Set(top3(r).map(t => t.h.id)), last: performance.now(), lastUi: 0, v: 0, done: false, key: '' };
+  S.nav = { sim, r, cum, total: cum[cum.length - 1], s: 0, idx: 0, si: 0, bearing: null, spoken: new Set(), voice: new Set(top3(r).map(t => t.h.id)), last: performance.now(), lastUi: 0, v: 0, done: false, key: '' };
+  for (const st of r.steps || []) { st.v1 = false; st.v2 = false; }
   if (!sim && !navigator.geolocation) return toast('Posizione non disponibile: usa Simula');
   setMode('nav');
+  keepAwake(true);
   if (!puck) {
     const el = document.createElement('div');
     el.innerHTML = '<svg class="puck" viewBox="0 0 44 44"><circle cx="22" cy="22" r="20" fill="#fff"/><circle cx="22" cy="22" r="17" fill="#1a73e8"/><path d="M22 10l8 20-8-4.500L14 30z" fill="#fff"/></svg>';
@@ -557,7 +561,47 @@ function startNav(sim) {
     }, { enableHighAccuracy: true, maximumAge: 1000 });
   }
 }
+// nell'app Android lo schermo resta acceso durante il viaggio
+function keepAwake(on) { try { if (NATIVE && NATIVE.keepAwake) NATIVE.keepAwake(on); } catch (e) { /* versione dell'app senza questa funzione */ } }
+
+const ORD = ['', 'prima', 'seconda', 'terza', 'quarta', 'quinta', 'sesta', 'settima', 'ottava'];
+function stepText(st) {
+  const side = st.dir === 'right' ? 'destra' : 'sinistra', into = st.name ? ` in ${st.name}` : '';
+  if (st.type === 'arrive') return 'Arrivo a destinazione';
+  if (st.type === 'rb') return `Alla rotonda prendi la ${ORD[st.exit] || st.exit + 'ª'} uscita${st.name ? ', ' + st.name : ''}`;
+  if (st.type === 'uturn') return 'Fai inversione';
+  if (st.type === 'keep') return `Tieni la ${side}${st.name ? ' per ' + st.name : ''}`;
+  if (st.type === 'sharp') return `Svolta stretta a ${side}${into}`;
+  return `Gira a ${side}${into}`;
+}
+function stepIcon(st) {
+  if (st.type === 'arrive') return ICON.pin;
+  if (st.type === 'rb') return `<span class="rbn">${st.exit}</span>`;
+  const deg = st.type === 'uturn' ? 180 : (st.type === 'sharp' ? 135 : st.type === 'keep' ? 35 : 90) * (st.dir === 'right' ? 1 : -1);
+  return `<svg viewBox="0 0 24 24" class="ic" style="transform:rotate(${deg}deg)"><path d="M12 3l-7 7.500h4.700V21h4.600V10.500H19z"/></svg>`;
+}
+const fmtNear = m => m < 25 ? 'Ora' : m < 100 ? Math.round(m / 10) * 10 + ' m' : fmtDist(m);
+
+// fuori percorso: nuovo calcolo dalla posizione attuale, con lo stesso tipo di percorso
+async function reroute(me) {
+  const n = S.nav; n.rerouting = true; n.lastReroute = performance.now();
+  say('Ricalcolo il percorso');
+  try {
+    const r = await call('route', { from: me, to: [S.to.lon, S.to.lat] });
+    if (S.nav !== n || n.done || r.error) return;
+    const nr = S.sel === 'safe' && r.safe ? r.safe : r.fast;
+    S.routes = { fast: S.sel === 'fast' ? nr : S.routes.fast, safe: S.sel === 'safe' ? nr : S.routes.safe };
+    map.getSource('r-' + S.sel).setData(line(nr.coords));
+    map.getSource('r-' + (S.sel === 'safe' ? 'fast' : 'safe')).setData(empty);
+    map.getSource('hot-route').setData({ type: 'FeatureCollection', features: nr.hot.map(x => { const h = S.hot[x.id]; return { type: 'Feature', properties: { id: h.id, n: h.n }, geometry: { type: 'Point', coordinates: [h.lon, h.lat] } }; }) });
+    const cum = [0];
+    for (let i = 1; i < nr.coords.length; i++) cum.push(cum[i - 1] + distM(nr.coords[i - 1], nr.coords[i]));
+    Object.assign(n, { r: nr, cum, total: cum[cum.length - 1], s: 0, idx: 0, si: 0, spoken: new Set(), voice: new Set(top3(nr).map(t => t.h.id)), key: '' });
+  } catch (e) { /* si riprova al prossimo rilevamento */ } finally { n.rerouting = false; n.off = 0; }
+}
+
 function stopNav() {
+  keepAwake(false);
   if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   if (window.speechSynthesis) speechSynthesis.cancel();
@@ -589,9 +633,9 @@ function camera(p, dt) {
 function tick(now) {
   const n = S.nav; if (!n || !n.sim || n.done) return;
   const dt = Math.min(0.5, (now - n.last) / 1000); n.last = now;
-  const next = n.r.hot.find(h => h.at > n.s - 30);
+  const next = n.r.hot.find(h => n.voice.has(h.id) && h.at > n.s - 30);
   const d = next ? next.at - n.s : Infinity;
-  const target = d < 320 ? 13 : 60;                    // rallenta vicino ai punti critici
+  const target = d < 300 ? 14 : 45;                    // rallenta prima dei punti da ricordare
   n.v += (target - n.v) * Math.min(1, dt * 2.5);
   n.s = Math.min(n.total, n.s + n.v * dt);
   camera(placeAt(n.s), dt);
@@ -604,8 +648,10 @@ function onPos(p) {
   const me = [p.coords.longitude, p.coords.latitude], c = n.r.coords;
   let bi = n.idx, bd = Infinity;
   for (let i = Math.max(0, n.idx - 10); i < Math.min(c.length, n.idx + 400); i++) { const d = distM(me, c[i]); if (d < bd) { bd = d; bi = i; } }
-  if (bd > 120) { n.off = (n.off || 0) + 1; if (n.off === 3) toast('Sei fuori percorso'); }
-  else { n.off = 0; n.s = n.cum[bi]; n.idx = Math.max(0, bi - 1); }
+  if (bd > 70) {
+    n.off = (n.off || 0) + 1;
+    if (n.off >= 4 && !n.rerouting && performance.now() - (n.lastReroute || 0) > 8000) reroute(me);
+  } else { n.off = 0; n.s = n.cum[bi]; n.idx = Math.max(0, bi - 1); }
   const now = performance.now(), dt = Math.min(1, (now - n.last) / 1000); n.last = now;
   const pl = placeAt(n.s);
   camera({ lng: me[0], lat: me[1], brg: pl.brg }, dt);
@@ -617,27 +663,29 @@ function updateNav(force) {
   if (!force && now - n.lastUi < 200) return; n.lastUi = now;
   const s = n.s, left = n.total - s;
   const eta = $('#eta'); if (eta) eta.innerHTML = `<b>${fmtMin(n.r.time * left / n.total)}</b><span>${fmtKm(Math.max(0, left))} all'arrivo</span>`;
-  const next = n.r.hot.find(h => h.at > s - 25), card = $('#navcard');
-  if (!next) {
-    if (n.key !== 'clear') { n.key = 'clear'; card.className = ''; card.innerHTML = `<div class="row">${ICON.ok}<div><div class="k">Via libera</div><div class="name">Nessun altro punto critico fino all'arrivo</div></div></div>`; }
-    return;
+  const card = $('#navcard');
+  // prossima manovra
+  const steps = n.r.steps || [];
+  while (n.si < steps.length - 1 && steps[n.si].at < s - 12) n.si++;
+  const st = steps[n.si], dm = st ? Math.max(0, st.at - s) : left;
+  let html = st ? `<div class="man"><span class="arrow">${stepIcon(st)}</span><div><div class="big">${fmtNear(dm)}</div><div class="name">${esc(stepText(st))}</div></div></div>` : '';
+  if (st && !n.sim && st.type !== 'arrive') {     // in simulazione si va troppo veloci per le istruzioni a voce
+    if (dm <= 320 && dm > 110 && !st.v1) { st.v1 = true; say(`Tra ${fmtDist(dm).replace(' m', ' metri')}, ${stepText(st).replace(/^./, ch => ch.toLowerCase())}`); }
+    else if (dm <= 45 && !st.v2) { st.v2 = true; say(stepText(st)); }
   }
-  const h = S.hot[next.id], d = Math.max(0, next.at - s);
-  if (d <= 260) {
-    const g = grouped(h)[0];
-    card.className = 'alert';
-    card.innerHTML = `<div class="k">Occhio · tra ${fmtDist(d)}</div><div class="name">${esc(hname(h))}</div>
-      <div class="why">${esc(phrase(h).replace(/^./, ch => ch.toUpperCase()))} · ${h.n} incidenti</div>`;
-    n.key = 'a' + next.id;
-    if (!n.spoken.has(next.id)) {
-      n.spoken.add(next.id);
-      if (n.voice.has(next.id)) say(`Occhio. ${h.s1 || hname(h)}. ${phrase(h)}.`);
+  // punto critico in arrivo
+  const next = n.r.hot.find(h => h.at > s - 25);
+  if (next) {
+    const h = S.hot[next.id], d = Math.max(0, next.at - s);
+    if (d <= 260) {
+      html += `<div class="occ"><b>Occhio · tra ${fmtDist(d)}</b>${esc(h.s1 || hname(h))} — ${esc(phrase(h))}</div>`;
+      if (!n.spoken.has(next.id)) {
+        n.spoken.add(next.id);
+        if (n.voice.has(next.id)) say(`Occhio. ${h.s1 || hname(h)}. ${phrase(h)}.`);
+      }
     }
-  } else {
-    card.className = '';
-    card.innerHTML = `<div class="k">Prossimo punto critico</div><div class="big">${fmtDist(d)}</div><div class="name">${esc(hname(h))}</div>`;
-    n.key = 'c' + next.id;
   }
+  if (html !== n.key) { n.key = html; card.className = ''; card.innerHTML = html; }
 }
 function navBarHtml() {
   return `<div class="navbar"><div class="eta" id="eta"></div>
@@ -649,8 +697,10 @@ function finishNav() {
   if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   const got = n.r.hot.length, fast = S.routes.fast.hot.length, card = $('#navcard');
   const cmp = S.sel === 'safe' && fast > got ? ` Con il percorso più veloce sarebbero stati ${fast}.` : '';
-  card.className = 'done';
-  card.innerHTML = `<div class="k">Sei arrivato</div><div class="name">${got === 0 ? 'Nessun punto critico attraversato.' : got === 1 ? 'Hai attraversato un punto critico.' : `Hai attraversato ${got} punti critici.`}${cmp}</div>`;
+  card.className = '';
+  card.innerHTML = `<div class="man done"><div><div class="k">Sei arrivato</div><div class="name">${got === 0 ? 'Nessun punto critico attraversato.' : got === 1 ? 'Hai attraversato un punto critico.' : `Hai attraversato ${got} punti critici.`}${cmp}</div></div></div>`;
+  n.key = 'done';
+  keepAwake(false);
   say(`Sei arrivato.${cmp}`);
   const eta = $('#eta'); if (eta) eta.innerHTML = '<b>Arrivato</b><span>Tocca Esci per tornare al percorso</span>';
 }

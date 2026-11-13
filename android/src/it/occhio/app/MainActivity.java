@@ -98,6 +98,7 @@ public class MainActivity extends Activity {
             }
         });
 
+        if (debuggable()) web.clearCache(true);   // nelle prove si vuole sempre l'ultima versione del sito
         askPermissions();
         String url = debuggable() ? getIntent().getStringExtra("url") : null; // solo per le prove via USB
         web.loadUrl(url != null && isOurs(Uri.parse(url)) ? url : SITE);
@@ -222,6 +223,15 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void speak(String text) {
             if (trusted && ttsReady) tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), "ui");
+        }
+
+        @JavascriptInterface
+        public void keepAwake(boolean on) {
+            if (!trusted) return;
+            runOnUiThread(() -> {
+                if (on) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            });
         }
 
         @JavascriptInterface
