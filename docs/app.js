@@ -57,7 +57,8 @@ const empty = { type: 'FeatureCollection', features: [] };
 const line = coords => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
 let meMarker, fromMarker, toMarker, puck;
 
-const mapReady = new Promise(res => map.on('load', res));
+// 'style.load' arriva prima di 'load' (che aspetta tutte le tessere): l'app è usabile prima
+const mapReady = new Promise(res => map.once('style.load', res));
 const dataReady = call('init');
 
 const appReady = Promise.all([mapReady, dataReady]).then(([, d]) => {
