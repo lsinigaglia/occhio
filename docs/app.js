@@ -161,7 +161,13 @@ let CLIPS = null;
 fetch('audio/index.json' + VQ).then(r => r.ok ? r.json() : null)
   .then(j => { if (j) CLIPS = new Set(j.phrases); }).catch(() => {});
 const slug = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-const clipFor = k => CLIPS && CLIPS.has(k) ? [`audio/p/${k}.mp3${VQ}`] : null;
+// stile della card e voce si scelgono dalla pagina di prova e restano memorizzati sul telefono
+const pref = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
+const QS = new URLSearchParams(location.search);   // ?stile=street&voce=liam per aprire direttamente una variante
+let STYLE = QS.get('stile') || pref('occhioStile', 'classico'), VOICE = QS.get('voce') || pref('occhioVoce', 'alice');
+const VOICES = { alice: ['Alice', 'audio/p'], jessica: ['Jessica', 'audio/v/jessica'], liam: ['Liam', 'audio/v/liam'] };
+const STYLES = { classico: 'Classico', sticker: 'Sticker', street: 'Street', chat: 'Chat' };
+const clipFor = k => CLIPS && CLIPS.has(k) ? [`${(VOICES[VOICE] || VOICES.alice)[1]}/${k}.mp3${VQ}`] : null;
 const alertClips = h => clipFor(phraseKey(h));
 const player = new Audio();
 // i browser lasciano partire l'audio solo dopo un tocco: lo si sblocca al tocco su Avvia o Simula
@@ -521,6 +527,12 @@ $('#sheetc').onclick = e => {
   if (a === 'reload') location.reload();
   else if (a === 'prova') { setMode('prova'); $('#sheet').classList.add('full'); }
   else if (a === 'demo') demoAlert(t.dataset.k);
+  else if (a === 'stile' || a === 'voce') {
+    if (a === 'stile') STYLE = t.dataset.k; else VOICE = t.dataset.k;
+    try { localStorage.setItem(a === 'stile' ? 'occhioStile' : 'occhioVoce', t.dataset.k); } catch (e) { /* vale solo per questa visita */ }
+    const top = $('#sheetc').scrollTop; render(); $('#sheetc').scrollTop = top;
+    demoAlert('ped');
+  }
   else if (a === 'skip') skipAhead();
   else if (a === 'about') setMode('about');
   else if (a === 'home') setMode('home');
@@ -744,15 +756,32 @@ function updateNav(force) {
       }
       alerting = top;
       if (top && now < n.bigUntil) {
-        html = `<div class="occbig"><span class="sym">${sym}</span><div><div class="pre">${esc(lab[0])}</div><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">tra ${fmtDist(d)} · ${esc(h.s1 || hname(h))}</div></div></div>`
+        html = bigCard(k, `tra ${fmtDist(d)} · ${esc(h.s1 || hname(h))}`)
           + (st ? `<div class="manmini"><span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span></div>` : '');
       } else {
-        html += `<div class="occ"><span class="sym">${sym}</span><div><b>${esc(lab.join(' '))} · ${fmtDist(d)}</b>${esc(h.s1 || hname(h))}</div></div>`;
+        html += stripCard(k, fmtDist(d), esc(h.s1 || hname(h)));
       }
     }
   }
   setAlerting(alerting);
   if (html !== n.key) { n.key = html; card.className = ''; card.innerHTML = html; }
+}
+
+// --- la card dell'avviso, nei suoi stili
+const EMOJI = { auto: '🚗', ped: '🚶', buche: '🕳️' };
+function bigCard(k, where) {
+  const lab = ALERT_LABEL[k], art = lab[0].split(' ').slice(1).join(' ');
+  if (STYLE === 'sticker') return `<div class="occbig sticker"><span class="emo">${EMOJI[k]}</span><div><div class="pre">occhio 👀 ${esc(art)}</div><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">${where}</div></div></div>`;
+  if (STYLE === 'street') return `<div class="occbig street"><div class="tape"></div><div class="in"><span class="sym">${ALERT_ICON[k]}</span><div><span class="tag">Occhio!</span><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">${where}</div></div></div></div>`;
+  if (STYLE === 'chat') return `<div class="occbig chat"><span class="ava">👀</span><div class="bub"><div class="lab">Oh, ${esc(lab.join(' ').toLowerCase())} ${EMOJI[k]}</div><div class="where">${where}</div></div></div>`;
+  return `<div class="occbig"><span class="sym">${ALERT_ICON[k]}</span><div><div class="pre">${esc(lab[0])}</div><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">${where}</div></div></div>`;
+}
+function stripCard(k, dist, name) {
+  const lab = ALERT_LABEL[k];
+  if (STYLE === 'sticker') return `<div class="occ sticker"><span class="emo">${EMOJI[k]}</span><div><b>occhio ${esc(lab[0].split(' ').slice(1).join(' '))} ${esc(lab[1])} · ${dist}</b>${name}</div></div>`;
+  if (STYLE === 'street') return `<div class="occ street"><span class="sym">${ALERT_ICON[k]}</span><div><b>${esc(lab[1])} · ${dist}</b>${name}</div></div>`;
+  if (STYLE === 'chat') return `<div class="occ chat"><span class="emo">👀</span><div><b>${esc(lab.join(' ').toLowerCase())} · ${dist}</b>${name}</div></div>`;
+  return `<div class="occ"><span class="sym">${ALERT_ICON[k]}</span><div><b>${esc(lab.join(' '))} · ${dist}</b>${name}</div></div>`;
 }
 
 // --- avviso per chi guida: poche parole grandi, un simbolo, tutto lo schermo che si accende
@@ -817,10 +846,14 @@ document.addEventListener('visibilitychange', () => {
 /* ------------------------------------------------------------------ prova degli avvisi */
 // Una pagina per vedere e sentire ogni avviso in pochi secondi, senza fare un viaggio.
 function provaHtml() {
+  const chips = (act, map, cur, name) => `<div class="chips">${Object.keys(map).map(k => `<button class="chip ${k === cur ? 'on' : ''}" type="button" data-act="${act}" data-k="${k}">${esc(name(map[k]))}</button>`).join('')}</div>`;
   const count = {};
   for (const h of S.hot) { const k = phraseKey(h); count[k] = (count[k] || 0) + 1; }
   return `<div class="dhead"><button class="iconbtn" type="button" data-act="home">${ICON.back}</button><div><h2>Prova gli avvisi</h2>
     <p class="sub">Tocca un avviso per vederlo e sentirlo com'è durante il viaggio.</p></div></div>
+    <h3>Stile della card</h3>${chips('stile', STYLES, STYLE, x => x)}
+    <h3>Voce</h3>${chips('voce', VOICES, VOICE, x => x[0])}
+    <h3>Avvisi</h3>
     ${Object.keys(ALERT_LABEL).map(k => `<button class="demo" type="button" data-act="demo" data-k="${k}"><span class="sym">${ALERT_ICON[k]}</span>
       <span class="hmain"><b>${esc(ALERT_LABEL[k].join(' '))}</b><span>${esc(PHRASES[k])} · ${count[k] || 0} punti</span></span></button>`).join('')}
     <p class="note">Versione ${esc(window.OCCHIO_V || 'locale')}. Voce: ${CLIPS ? 'registrata' : 'del telefono'}.</p>`;
@@ -830,11 +863,11 @@ function demoAlert(k) {
   const card = $('#navcard'), lab = ALERT_LABEL[k];
   clearTimeout(demoT);
   card.hidden = false; card.className = '';
-  card.innerHTML = `<div class="occbig"><span class="sym">${ALERT_ICON[k]}</span><div><div class="pre">${esc(lab[0])}</div><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">tra 200 m · Via Marmorata</div></div></div>`;
+  card.innerHTML = bigCard(k, 'tra 200 m · Via Marmorata');
   flashScreen(); setAlerting(true);
   player.muted = false; sayKind(k);
   demoT = setTimeout(() => {
-    card.innerHTML = `<div class="occ"><span class="sym">${ALERT_ICON[k]}</span><div><b>${esc(lab.join(' '))} · 150 m</b>Via Marmorata</div></div>`;
+    card.innerHTML = stripCard(k, '150 m', 'Via Marmorata');
     demoT = setTimeout(endDemoAlert, 3000);
   }, 5000);
 }
@@ -853,7 +886,7 @@ function skipAhead() {
 }
 
 /* avvio */
-if (new URLSearchParams(location.search).has('prova')) appReady.then(() => { setMode('prova'); $('#sheet').classList.add('full'); });
+if (QS.has('prova')) appReady.then(() => { setMode('prova'); $('#sheet').classList.add('full'); if (ALERT_LABEL[QS.get('demo')]) demoAlert(QS.get('demo')); });
 render();
 if (navigator.permissions && navigator.permissions.query) {
   navigator.permissions.query({ name: 'geolocation' }).then(p => { if (p.state === 'granted') locate(false); }).catch(() => {});

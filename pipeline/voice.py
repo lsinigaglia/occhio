@@ -71,6 +71,8 @@ def main():
     ap.add_argument('--model', default='eleven_v4')
     ap.add_argument('--only', default='', help='nomi di strada separati da | (per generarne solo alcuni)')
     ap.add_argument('--force', action='store_true', help='rigenera anche le clip già presenti')
+    ap.add_argument('--dir', default='p', help="cartella sotto docs/audio (voci alternative: v/<nome>)")
+    ap.add_argument('--bang', action='store_true', help='frasi con il punto esclamativo, più energiche')
     a = ap.parse_args()
     env = dict(l.strip().split('=', 1) for l in open(os.path.join(ROOT, '.env')) if '=' in l)
     key = env['ELEVENLABS_API_KEY']
@@ -79,7 +81,8 @@ def main():
     if a.only:
         wanted = {slug(x) for x in a.only.split('|')}
         names = [n for n in names if slug(n) in wanted]
-    jobs = [(f'p/{k}.mp3', t) for k, t in PHRASES.items()]
+    jobs = [(f'{a.dir}/{k}.mp3', t[:-1] + '!' if a.bang else t) for k, t in PHRASES.items()]
+    os.makedirs(os.path.join(AUDIO, a.dir), exist_ok=True)
     os.makedirs(os.path.join(AUDIO, 'p'), exist_ok=True)
     made = chars = 0
     for rel, text in jobs:
