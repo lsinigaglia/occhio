@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Occhio! — i dati</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600&display=swap">
+<style>
+:root { --ink: #141414; --paper: #F6F3EC; --orange: #FF9800; --soft: #55524A; --line: #D9D4C7; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 17px/1.45 Inter, Arial, sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 28px 16px 56px; }
+header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.tag { background: var(--orange); font: 400 26px/1 Anton, Impact, sans-serif; letter-spacing: 2px; text-transform: uppercase; padding: 9px 14px 7px; }
+h1 { font: 400 40px/1.1 Anton, Impact, sans-serif; text-transform: uppercase; letter-spacing: 1px; margin: 0; }
+h2 { font: 400 26px/1.15 Anton, Impact, sans-serif; text-transform: uppercase; letter-spacing: 1px; margin: 40px 0 6px; }
+p.sub { margin: 0 0 14px; color: var(--soft); }
+.flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 24px; }
+.step { background: var(--ink); color: var(--paper); border-radius: 14px; padding: 18px 18px 16px; }
+.step .num { font: 400 54px/1 Anton, Impact, sans-serif; color: var(--orange); }
+.step .what { margin-top: 8px; font-size: 16px; line-height: 1.35; }
+.wrap { overflow-x: auto; background: #fff; border: 2px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th { text-align: left; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--soft); padding: 11px 12px; border-bottom: 2px solid var(--line); white-space: nowrap; }
+td { padding: 9px 12px; border-bottom: 1px solid #ECE8DD; vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td.big { font-weight: 600; font-size: 17px; }
+td.nw { white-space: nowrap; }
+td.mono { font-family: ui-monospace, Consolas, monospace; font-size: 13.5px; color: var(--soft); }
+.note { margin-top: 12px; color: var(--soft); font-size: 15px; }
+a { color: inherit; text-underline-offset: 3px; }
+footer { margin-top: 40px; padding-top: 16px; border-top: 2px solid var(--line); color: var(--soft); font-size: 15px; }
+@media (max-width: 820px) { .flow { grid-template-columns: 1fr 1fr; } h1 { font-size: 30px; } .step .num { font-size: 40px; } }
+</style>
+</head>
+<body>
+<main>
+<header><span class="tag">Occhio!</span><h1>I dati, gen 2018 – ago 2022</h1></header>
+
+<div class="flow">
+<div class="step"><div class="num">127.250</div><div class="what">incidenti rilevati dalla Polizia Locale di Roma Capitale</div></div>
+<div class="step"><div class="num">96.985</div><div class="what">con posizione affidabile: sono quelli che usiamo</div></div>
+<div class="step"><div class="num">628</div><div class="what">punti critici: 90 metri di strada con almeno 22 incidenti</div></div>
+<div class="step"><div class="num">21.037</div><div class="what">incidenti avvenuti in quei punti: più di uno su cinque</div></div>
+</div>
+
+<h2>Com'è fatto il dato di partenza</h2>
+<p class="sub">Dodici incidenti veri di ago 2022, così come li pubblica il Comune: quando, dove, che tipo, chi era coinvolto, quanti feriti, le coordinate.</p>
+<div class="wrap"><table>
+<tr><th>Data e ora</th><th>Strada</th><th>Traversa</th><th>Tipo di incidente</th><th>Veicoli</th><th class="n">Feriti</th><th>Coordinate</th></tr>
+<tr><td class='nw'>01/08/2022 00:30</td><td>Viale Palmiro Togliatti</td><td>Via dei Gelsi</td><td>Tamponamento</td><td>Autovettura privata</td><td class='n'>0</td><td class='nw mono'>41.8902, 12.5738</td></tr><tr><td class='nw'>02/08/2022 10:30</td><td>Via Cristoforo Colombo</td><td>Piazzale XXV Marzo 1957</td><td>Tamponamento</td><td>Autovettura privata, Motociclo a solo</td><td class='n'>0</td><td class='nw mono'>41.7858, 12.4115</td></tr><tr><td class='nw'>03/08/2022 20:15</td><td>Via Affile</td><td>Via Tiburtina</td><td>Tamponamento</td><td>Autovettura privata</td><td class='n'>1</td><td class='nw mono'>41.9361, 12.6143</td></tr><tr><td class='nw'>05/08/2022 12:05</td><td>Largo di S. Susanna</td><td>Via Venti Settembre</td><td>Scontro laterale fra veicoli in marcia</td><td>Autovettura privata, Motrice</td><td class='n'>0</td><td class='nw mono'>41.9046, 12.4938</td></tr><tr><td class='nw'>08/08/2022 07:50</td><td>Via Tor De&#x27; Schiavi</td><td>Via Vincenzo Cesati</td><td>Scontro frontale/laterale SX fra veicoli in marcia</td><td>Autovettura privata, Autocarro inferiore 35 q.</td><td class='n'>0</td><td class='nw mono'>41.8928, 12.5599</td></tr><tr><td class='nw'>10/08/2022 15:00</td><td>Viale di Tor di Quinto</td><td>Via Riano</td><td>Veicolo in marcia contro ostacolo fisso</td><td>Autocarro inferiore 35 q., Autovettura privata</td><td class='n'>0</td><td class='nw mono'>41.9372, 12.47</td></tr><tr><td class='nw'>13/08/2022 01:15</td><td>Viale delle Gardenie</td><td>Via dei Lauri</td><td>Scontro frontale/laterale DX fra veicoli in marcia</td><td>Autovettura privata</td><td class='n'>0</td><td class='nw mono'>41.8859, 12.5668</td></tr><tr><td class='nw'>16/08/2022 20:20</td><td>Via della Giustiniana</td><td>Via Concesio</td><td>Scontro frontale/laterale SX fra veicoli in marcia</td><td>Autovettura privata</td><td class='n'>0</td><td class='nw mono'>41.9947, 12.4552</td></tr><tr><td class='nw'>19/08/2022 23:15</td><td>Via del Foro Olitorio</td><td>Via del Teatro di Marcello</td><td>Scontro frontale/laterale SX fra veicoli in marcia</td><td>Autovettura privata, Autovettura pubblica</td><td class='n'>0</td><td class='nw mono'>41.8907, 12.4798</td></tr><tr><td class='nw'>23/08/2022 16:30</td><td>Viale Oceano Atlantico</td><td>Piazzale XXV Marzo 1957</td><td>Scontro laterale fra veicoli in marcia</td><td>Autovettura privata</td><td class='n'>1</td><td class='nw mono'>41.8202, 12.4716</td></tr><tr><td class='nw'>26/08/2022 10:20</td><td>Via Tommaso Campanella</td><td>Via Pietro Giannone</td><td>Scontro frontale/laterale DX fra veicoli in marcia</td><td>Autovettura privata</td><td class='n'>1</td><td class='nw mono'>41.9106, 12.4516</td></tr><tr><td class='nw'>29/08/2022 16:10</td><td>Via delle Messi D&#x27;Oro</td><td>Via di Pietralata</td><td>Investimento di pedone</td><td>Autovettura privata</td><td class='n'>1</td><td class='nw mono'>41.9192, 12.5526</td></tr>
+</table></div>
+<p class="note">Le coordinate sono ricavate dall'indirizzo del verbale e arrotondate a circa 10 metri. Scartiamo gli incidenti segnati su un punto generico della strada, perché creerebbero punti critici finti.</p>
+
+<h2>I dodici punti con più incidenti</h2>
+<p class="sub">Ognuno è un tratto di circa 90 metri. Lungo un percorso, Occhio! unisce quelli vicini in un solo tratto critico.</p>
+<div class="wrap"><table>
+<tr><th class="n">#</th><th>Dove</th><th class="n">Incidenti</th><th class="n">In moto o bici</th><th class="n">Con feriti</th><th class="n">Morti</th></tr>
+<tr><td class='n'>1</td><td><b>Piazza Guglielmo Marconi</b> · Via Cristoforo Colombo</td><td class='n big'>106</td><td class='n'>30</td><td class='n'>34</td><td class='n'>–</td></tr><tr><td class='n'>2</td><td><b>Piazzale Clodio</b> · Viale Giovanni Falcone e Paolo Borsellino</td><td class='n big'>97</td><td class='n'>39</td><td class='n'>42</td><td class='n'>–</td></tr><tr><td class='n'>3</td><td><b>Piazzale Ostiense</b> · Viale Marco Polo</td><td class='n big'>96</td><td class='n'>29</td><td class='n'>39</td><td class='n'>–</td></tr><tr><td class='n'>4</td><td><b>Via Prenestina</b> · Viale Palmiro Togliatti</td><td class='n big'>96</td><td class='n'>17</td><td class='n'>33</td><td class='n'>–</td></tr><tr><td class='n'>5</td><td><b>Piazzale degli Eroi</b> · Circonvallazione Trionfale</td><td class='n big'>95</td><td class='n'>45</td><td class='n'>35</td><td class='n'>–</td></tr><tr><td class='n'>6</td><td><b>Piazza Venezia</b> · Via del Corso</td><td class='n big'>95</td><td class='n'>47</td><td class='n'>36</td><td class='n'>–</td></tr><tr><td class='n'>7</td><td><b>Piazza Pio XI</b> · Via Gregorio VII</td><td class='n big'>94</td><td class='n'>28</td><td class='n'>29</td><td class='n'>–</td></tr><tr><td class='n'>8</td><td><b>Via Tuscolana</b> · Viale Palmiro Togliatti</td><td class='n big'>91</td><td class='n'>21</td><td class='n'>29</td><td class='n'>1</td></tr><tr><td class='n'>9</td><td><b>Via Tuscolana</b> · Via Dell&#x27;Arco di Travertino</td><td class='n big'>90</td><td class='n'>27</td><td class='n'>36</td><td class='n'>–</td></tr><tr><td class='n'>10</td><td><b>Piazzale Numa Pompilio</b> · Viale delle Terme di Caracalla</td><td class='n big'>89</td><td class='n'>35</td><td class='n'>32</td><td class='n'>–</td></tr><tr><td class='n'>11</td><td><b>Via Tiburtina</b> · Via di Portonaccio</td><td class='n big'>88</td><td class='n'>22</td><td class='n'>20</td><td class='n'>1</td></tr><tr><td class='n'>12</td><td><b>Piazza di Porta Capena</b> · Via di S. Gregorio</td><td class='n big'>87</td><td class='n'>33</td><td class='n'>37</td><td class='n'>–</td></tr>
+</table></div>
+
+<footer>Fonti: <a href="https://dati.comune.roma.it/catalog/dataset?tags=incidenti">open data di Roma Capitale</a> (incidenti), <a href="https://www.openstreetmap.org">OpenStreetMap</a> (strade). Codice e procedura: <a href="https://github.com/lsinigaglia/occhio">github.com/lsinigaglia/occhio</a>. I dati pubblici si fermano ad agosto 2022.</footer>
+</main>
+</body>
+</html>
