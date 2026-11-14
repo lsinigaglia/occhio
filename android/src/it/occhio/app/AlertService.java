@@ -269,16 +269,17 @@ public class AlertService extends Service implements LocationListener {
         if (!Settings.canDrawOverlays(this)) return;
         hideCard();
         float dp = getResources().getDisplayMetrics().density;
-        int ink = 0xFF1A1200;
+        int ink = 0xFFFFFFFF, accent = 0xFFFF9800;   // stile Street: nero, parola bianca, arancione per il resto
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
-        root.setBackgroundColor(0xFFFF9800);
+        root.setBackgroundColor(0xFF111111);
         root.setPadding((int) (24 * dp), (int) (24 * dp), (int) (24 * dp), (int) (24 * dp));
 
         ImageView icon = new ImageView(this);
         icon.setImageResource("ped".equals(a.kind) ? R.drawable.ic_alert_ped
-                : "auto".equals(a.kind) ? R.drawable.ic_alert_car : R.drawable.ic_alert_warn);
+                : "auto".equals(a.kind) ? R.drawable.ic_alert_car : R.drawable.ic_alert_hole);
+        icon.setColorFilter(accent);
         root.addView(icon, new LinearLayout.LayoutParams((int) (170 * dp), (int) (170 * dp)));
 
         TextView big = new TextView(this);
@@ -292,7 +293,7 @@ public class AlertService extends Service implements LocationListener {
 
         TextView where = new TextView(this);
         where.setText("tra " + meters + " m · " + a.name);
-        where.setTextColor(ink);
+        where.setTextColor(accent);
         where.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
         where.setTypeface(Typeface.DEFAULT_BOLD);
         where.setGravity(Gravity.CENTER);

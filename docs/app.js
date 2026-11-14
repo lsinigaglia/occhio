@@ -164,7 +164,8 @@ const slug = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').repla
 // stile della card e voce si scelgono dalla pagina di prova e restano memorizzati sul telefono
 const pref = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
 const QS = new URLSearchParams(location.search);   // ?stile=street&voce=liam per aprire direttamente una variante
-let STYLE = QS.get('stile') || pref('occhioStile', 'classico'), VOICE = QS.get('voce') || pref('occhioVoce', 'alice');
+// scelte fatte: stile Street e voce Jessica; le alternative restano raggiungibili solo da link (?stile=...&voce=...)
+let STYLE = QS.get('stile') || 'street', VOICE = QS.get('voce') || 'jessica';
 const VOICES = { alice: ['Alice', 'audio/p'], jessica: ['Jessica', 'audio/v/jessica'], liam: ['Liam', 'audio/v/liam'] };
 const STYLES = { classico: 'Classico', sticker: 'Sticker', street: 'Street', chat: 'Chat' };
 // testo dell'avviso: la frase intera ("Occhio ai pedoni") oppure la sola parola "Occhio"
@@ -801,7 +802,7 @@ const labSize = t => { const w = Math.max(...t.split(' ').map(x => x.length)); r
 const ALERT_ICON = {
   auto: '<svg viewBox="0 0 24 24"><path d="M18.920 6.010C18.720 5.420 18.160 5 17.500 5h-11c-.660 0-1.210.420-1.420 1.010L3 12v8c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-1h12v1c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-8l-2.080-5.990zM6.500 16c-.830 0-1.500-.670-1.500-1.500S5.670 13 6.500 13s1.500.670 1.500 1.500S7.330 16 6.500 16zm11 0c-.830 0-1.500-.670-1.500-1.500s.670-1.500 1.500-1.500 1.500.670 1.500 1.500-.670 1.500-1.500 1.500zM5 11l1.500-4.500h11L19 11H5z"/></svg>',
   ped: '<svg viewBox="0 0 24 24"><path d="M13.500 5.500c1.100 0 2-.900 2-2s-.900-2-2-2-2 .900-2 2 .900 2 2 2zM9.800 8.900L7 23h2.100l1.800-8 2.100 2v6h2v-7.500l-2.100-2 .600-3C14.800 12 16.800 13 19 13v-2c-1.900 0-3.500-1-4.300-2.400l-1-1.600c-.400-.600-1-1-1.700-1-.300 0-.500.100-.800.100L6 8.300V13h2V9.600l1.800-.700"/></svg>',
-  buche: '<svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
+  buche: '<svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 4.500a5.500 5.500 0 1 0 0 11 5.500 5.500 0 0 0 0-11zm0 3.300a2.200 2.200 0 1 1 0 4.400 2.200 2.200 0 0 1 0-4.400zM1 13h4.300l1.600 4.300c.700 1.900 2.500 3.200 4.500 3.200h1.200c2 0 3.800-1.300 4.500-3.200L18.700 13H23v2.200h-2.800l-1.100 2.900c-1 2.800-3.600 4.600-6.500 4.600h-1.200c-2.900 0-5.500-1.800-6.500-4.600l-1.100-2.900H1zM3.200 4.400l1.500-1.500 2.300 2.300-1.500 1.500zM20.800 4.400l-1.500-1.500-2.300 2.300 1.500 1.500z"/></svg>',
 };
 const flashEl = document.body.appendChild(Object.assign(document.createElement('div'), { id: 'flash' }));
 function flashScreen() {
@@ -860,9 +861,7 @@ function provaHtml() {
   for (const h of S.hot) { const k = phraseKey(h); count[k] = (count[k] || 0) + 1; }
   return `<div class="dhead"><button class="iconbtn" type="button" data-act="home">${ICON.back}</button><div><h2>Prova gli avvisi</h2>
     <p class="sub">Tocca un avviso per vederlo e sentirlo com'è durante il viaggio.</p></div></div>
-    <h3>Stile della card</h3>${chips('stile', STYLES, STYLE, x => x)}
     <h3>Testo</h3>${chips('testo', TEXTS, SOLO ? 'solo' : 'frase', x => x)}
-    <h3>Voce</h3>${chips('voce', VOICES, VOICE, x => x[0])}
     <h3>Avvisi</h3>
     ${Object.keys(ALERT_LABEL).map(k => `<button class="demo" type="button" data-act="demo" data-k="${k}"><span class="sym">${ALERT_ICON[k]}</span>
       <span class="hmain"><b>${esc(ALERT_LABEL[k].join(' '))}</b><span>${esc(PHRASES[k])} · ${count[k] || 0} punti</span></span></button>`).join('')}
