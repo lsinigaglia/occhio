@@ -847,9 +847,22 @@ function updateNav(force) {
     const d = Math.max(0, z.at - s);
     if (!n.said.has(z)) { n.said.add(z); n.curZ = z; n.shownAt = now; flashScreen(); sayKind(z.kind); }
     alerting = true;
-    html = bigCard(z.kind, `${d > 0 ? 'tra ' + fmtDist(d) : 'adesso'} · ${esc(z.name)}`)
-      + (st ? `<div class="manmini"><span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span></div>` : '');
+    // La card resta ferma sullo schermo: si disegna una volta sola e poi cambiano soltanto i testi
+    // (ridisegnarla a ogni aggiornamento della distanza la faceva comparire e sparire di continuo).
+    const where = `${d > 0 ? 'tra ' + fmtDist(d) : 'adesso'} · ${esc(z.name)}`;
+    const mini = st ? `<span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span>` : '';
+    if (n.cardZ !== z || !card.querySelector('.occbig')) {
+      n.cardZ = z; n.whereKey = where; n.miniKey = mini; n.key = '';
+      card.className = '';
+      card.innerHTML = bigCard(z.kind, where) + `<div class="manmini"${mini ? '' : ' hidden'}>${mini}</div>`;
+    } else {
+      if (where !== n.whereKey) { n.whereKey = where; card.querySelector('.where').innerHTML = where; }
+      if (mini !== n.miniKey) { n.miniKey = mini; const m = card.querySelector('.manmini'); m.hidden = !mini; m.innerHTML = mini; }
+    }
+    setAlerting(true);
+    return;
   } else if (n.curZ && now - n.shownAt >= 8000) n.curZ = null;
+  n.cardZ = null;
   setAlerting(alerting);
   if (html !== n.key) { n.key = html; card.className = ''; card.innerHTML = html; }
 }
