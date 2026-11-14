@@ -200,10 +200,29 @@ function sayKind(k) {
   };
   next();
 }
-// i tre punti peggiori del tragitto, nell'ordine in cui si incontrano
-function top3(r) {
-  return r.hot.map(x => ({ x, h: S.hot[x.id] })).sort((a, b) => b.h.w - a.h.w).slice(0, 3).sort((a, b) => a.x.at - b.x.at);
+// Tratti critici: i punti critici vicini lungo il percorso (a meno di 350 m l'uno dall'altro)
+// contano come un tratto solo. Chi guida non deve tenere a mente 13 incroci, ma 3 o 4 tratti.
+function zones(r) {
+  if (r.zones) return r.zones;
+  const out = [];
+  for (const x of r.hot) {
+    const h = S.hot[x.id], z = out[out.length - 1];
+    if (z && x.at - z.end <= 350) { z.hs.push(h); z.end = x.at; z.n += h.n; z.w += h.w; if (h.w > z.main.w) z.main = h; }
+    else out.push({ hs: [h], at: x.at, end: x.at, n: h.n, w: h.w, main: h, first: h });
+  }
+  for (const z of out) {
+    const c = new Map();
+    for (const h of z.hs) if (h.s1) c.set(h.s1, (c.get(h.s1) || 0) + h.n);
+    z.name = [...c.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0])[0] || hname(z.main);
+    z.kind = phraseKey(z.main);
+  }
+  return (r.zones = out);
 }
+// i tratti da ricordare: i più pesanti, al massimo 3 (4 sui tragitti lunghi), nell'ordine in cui si incontrano
+const topZones = r => [...zones(r)].sort((a, b) => b.w - a.w).slice(0, r.dist < 4000 ? 3 : 4).sort((a, b) => a.at - b.at);
+const zclass = z => z.n >= 40 ? 'r' : z.n >= 20 ? 'o' : 'a';
+const zsub = z => (z.hs.length > 1 ? `${z.hs.length} punti vicini · ` : '') + `${z.n} incidenti`;
+const zoneMarkers = r => ({ type: 'FeatureCollection', features: zones(r).map(z => ({ type: 'Feature', properties: { id: z.main.id, n: z.n }, geometry: { type: 'Point', coordinates: [z.main.lon, z.main.lat] } })) });
 function grouped(h) {
   const m = new Map();
   for (const [n, k] of h.nat) { const l = natLabel(n); m.set(l, (m.get(l) || 0) + k); }
@@ -387,7 +406,7 @@ function select(k, doFit) {
   }
   for (const s of ['case', 'line']) map.moveLayer(`r-${k}-${s}`, 'r-fast-hit');
   const r = S.routes[k];
-  map.getSource('hot-route').setData({ type: 'FeatureCollection', features: r.hot.map(x => { const h = S.hot[x.id]; return { type: 'Feature', properties: { id: h.id, n: h.n }, geometry: { type: 'Point', coordinates: [h.lon, h.lat] } }; }) });
+  map.getSource('hot-route').setData(zoneMarkers(r));
   render();
   if (doFit) setTimeout(fit, 120);
 }
@@ -459,16 +478,16 @@ function rcard(k, r, label) {
   return `<button class="rcard ${k} ${S.sel === k ? 'sel' : ''}" type="button" data-sel="${k}">
     <span class="rlabel"><i></i>${label}</span><span class="rtime">${fmtMin(r.time)}</span>
     <span class="rsub">${fmtKm(r.dist)}${r.via[0] ? ' · ' + esc(r.via[0]) : ''}</span>
-    <span class="rstat"><b>${r.hot.length}</b> ${r.hot.length === 1 ? 'punto critico' : 'punti critici'}</span>
+    <span class="rstat"><b>${zones(r).length}</b> ${zones(r).length === 1 ? 'tratto critico' : 'tratti critici'}</span>
     <span class="rstat"><b>${r.inc}</b> incidenti</span></button>`;
 }
 function previewHtml() {
   const { fast, safe } = S.routes, r = S.routes[S.sel];
   let h = '';
   if (safe) {
-    const dm = Math.max(1, Math.round((safe.time - fast.time) / 60)), dh = fast.hot.length - safe.hot.length;
+    const dm = Math.max(1, Math.round((safe.time - fast.time) / 60)), dh = zones(fast).length - zones(safe).length;
     const gains = [];
-    if (dh > 0) gains.push(dh + (dh === 1 ? ' punto critico in meno' : ' punti critici in meno'));
+    if (dh > 0) gains.push(dh + (dh === 1 ? ' tratto critico in meno' : ' tratti critici in meno'));
     if (safe.inc < fast.inc) gains.push(`−${pct(fast.inc - safe.inc, fast.inc)}% incidenti registrati`);
     h += `<p class="gain">Più prudente: +${dm} min, <b>${gains.join(', ') || 'meno incidenti gravi'}</b> sul tragitto.</p>`;
     h += `<div class="rcards">${rcard('safe', safe, 'Più prudente')}${rcard('fast', fast, 'Più veloce')}</div>`;
@@ -479,20 +498,15 @@ function previewHtml() {
     <button class="btn tonal" type="button" data-act="sim">${ICON.play}Simula</button>
     ${NATIVE ? '' : `<button class="btn ghost" type="button" data-act="gmaps" aria-label="Apri in Google Maps">${ICON.gmaps}</button>`}</div>`;
   if (NATIVE) h += `<div class="actions" style="margin-top:8px"><button class="btn ghost" style="flex:1" type="button" data-act="bgstart">${ICON.gmaps}Usa Google Maps con gli avvisi</button></div>`;
-  const top = top3(r), topIds = new Set(top.map(t => t.h.id));
-  const row = (p, x) => { const g = grouped(p)[0]; return `<button class="hrow" type="button" data-hot="${p.id}"><span class="badge ${hclass(p)}">${p.n}</span>
-      <span class="hmain"><b>${esc(hname(p))}</b><span>${p.tw} con due ruote${g ? ' · ' + esc(g[0].toLowerCase()) : ''}</span></span>
-      <span class="hdist">${fmtDist(x.at)}</span></button>`; };
-  if (!r.hot.length) h += '<h3>Nessun punto critico sul percorso</h3>';
+  const top = topZones(r), all = zones(r);
+  if (!all.length) h += '<h3>Nessun tratto critico sul percorso</h3>';
   else {
-    h += `<h3>${top.length === 1 ? 'Il punto da ricordare' : `I ${top.length} punti da ricordare`}</h3>`;
-    for (const t of top) {
-      h += `<button class="keep" type="button" data-hot="${t.h.id}"><span class="badge ${hclass(t.h)}">${t.h.n}</span>
-        <span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(alertLabel(t.h))}: ${esc(phrase(t.h))}</span></span><span class="hdist">${fmtDist(t.x.at)}</span></button>`;
+    h += `<h3>${top.length === 1 ? 'Il tratto a cui stare attento' : `I ${top.length} tratti a cui stare attento`}</h3>`;
+    for (const z of top) {
+      h += `<button class="keep" type="button" data-hot="${z.main.id}"><span class="badge ${zclass(z)}">${z.n}</span>
+        <span class="hmain"><b>${esc(z.name)}</b><span class="say">${esc(zsub(z))}</span></span><span class="hdist">${fmtDist(z.at)}</span></button>`;
     }
-    h += `<p class="note" style="margin:8px 0 0">Durante il viaggio ti avviso a voce solo prima di questi.</p>`;
-    const rest = r.hot.filter(x => !topIds.has(x.id));
-    if (rest.length) { h += `<h3>Altri ${rest.length} punti critici</h3>`; for (const x of rest) h += row(S.hot[x.id], x); }
+    h += `<p class="note" style="margin:8px 0 0">Durante il viaggio ti avviso solo prima di questi${all.length > top.length ? `. Gli altri ${all.length - top.length} tratti minori restano segnati sulla mappa` : ''}.</p>`;
   }
   h += `<p class="note">Incidenti rilevati dalla Polizia Locale, ${period()} (open data Roma Capitale). Il confronto non tiene conto del traffico.</p>`;
   return h;
@@ -584,10 +598,10 @@ function openGmaps(navigate) {
 // App Android: Occhio resta attivo in background e avvisa mentre si usa Google Maps
 function startBackground() {
   const r = S.routes[S.sel];
-  const alerts = top3(r).map(t => ({
-    lat: t.h.lat, lon: t.h.lon, name: t.h.s1 || hname(t.h), phrase: phrase(t.h),
-    label: SOLO ? 'Occhio' : alertLabel(t.h), kind: phraseKey(t.h),
-    clips: (clipFor(SOLO ? 'occhio' : phraseKey(t.h)) || []).map(u => new URL(u, location.href).href),
+  const alerts = topZones(r).map(z => ({
+    lat: z.first.lat, lon: z.first.lon, name: z.name, phrase: PHRASES[z.kind],
+    label: SOLO ? 'Occhio' : ALERT_LABEL[z.kind].join(' '), kind: z.kind,
+    clips: (clipFor(SOLO ? 'occhio' : z.kind) || []).map(u => new URL(u, location.href).href),
   }));
   if (!alerts.length) { toast('Nessun punto critico su questo percorso'); return openGmaps(true); }
   if (!NATIVE.startTrip(JSON.stringify({ alerts }))) return toast('Consenti la posizione precisa a Occhio, poi tocca di nuovo Avvia');
@@ -595,14 +609,14 @@ function startBackground() {
   setTimeout(() => openGmaps(true), 500);
 }
 function bgHtml() {
-  const r = S.routes[S.sel], top = top3(r);
+  const r = S.routes[S.sel], top = topZones(r);
   let full = true;
   try { full = !NATIVE.canOverlay || NATIVE.canOverlay(); } catch (e) { /* versione dell'app senza avviso a tutto schermo */ }
-  return `<h2>Occhio è attivo</h2><p class="sub">${top.length ? `Usa pure Google Maps: prima di questi punti ti avviso a voce e ${full ? 'con un avviso a tutto schermo' : 'con una notifica'}.` : 'Nessun punto critico su questo percorso.'}</p>
+  return `<h2>Occhio è attivo</h2><p class="sub">${top.length ? `Usa pure Google Maps: prima di questi tratti ti avviso a voce e ${full ? 'con un avviso a tutto schermo' : 'con una notifica'}.` : 'Nessun tratto critico su questo percorso.'}</p>
     <div class="actions" style="margin-bottom:4px"><button class="btn primary" type="button" data-act="gnav">${ICON.nav}Apri Google Maps</button>
     <button class="btn danger" type="button" data-act="bgstop">Termina</button></div>
     ${full ? '' : `<div class="advice">${ICON.bulb}<div>Per l'avviso grande a tutto schermo, consenti a Occhio di comparire sopra le altre app. <button class="link" style="padding:6px 0 0;display:block" type="button" data-act="overlay">Attiva</button></div></div>`}
-    ${top.map(t => `<div class="keep"><span class="badge ${hclass(t.h)}">${t.h.n}</span><span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(alertLabel(t.h))}: ${esc(phrase(t.h))}</span></span></div>`).join('')}`;
+    ${top.map(z => `<div class="keep"><span class="badge ${zclass(z)}">${z.n}</span><span class="hmain"><b>${esc(z.name)}</b><span class="say">${esc(zsub(z))}</span></span></div>`).join('')}`;
 }
 
 /* ------------------------------------------------------------------ viaggio */
@@ -610,7 +624,7 @@ let wakeLock = null, watchId = null;
 function startNav(sim) {
   const r = S.routes[S.sel], cum = [0];
   for (let i = 1; i < r.coords.length; i++) cum.push(cum[i - 1] + distM(r.coords[i - 1], r.coords[i]));
-  S.nav = { sim, r, cum, total: cum[cum.length - 1], s: 0, idx: 0, si: 0, bearing: null, spoken: new Set(), voice: new Set(top3(r).map(t => t.h.id)), last: performance.now(), lastUi: 0, v: 0, done: false, key: '' };
+  S.nav = { sim, r, cum, total: cum[cum.length - 1], s: 0, idx: 0, si: 0, bearing: null, said: new Set(), tz: topZones(r), last: performance.now(), lastUi: 0, v: 0, done: false, key: '' };
   for (const st of r.steps || []) { st.v1 = false; st.v2 = false; }
   if (!sim && !navigator.geolocation) return toast('Posizione non disponibile: usa Simula');
   setMode('nav');
@@ -622,8 +636,8 @@ function startNav(sim) {
   }
   puck.setLngLat(r.coords[0]).addTo(map);
   unlockAudio();
-  for (const t of top3(r)) for (const u of alertClips(t.h) || []) fetch(u).catch(() => {});   // le clip sono già scaricate quando servono
-  say(r.hot.length ? 'Partiamo. Ti avviso prima dei punti da ricordare.' : 'Partiamo. Nessun punto critico sul percorso.');
+  for (const z of topZones(r)) for (const u of clipFor(SOLO ? 'occhio' : z.kind) || []) fetch(u).catch(() => {});   // le clip sono già scaricate quando servono
+  say(r.hot.length ? 'Partiamo. Ti avviso prima dei tratti critici.' : 'Partiamo. Nessun tratto critico sul percorso.');
   if (navigator.wakeLock) navigator.wakeLock.request('screen').then(w => wakeLock = w).catch(() => {});
   updateNav(true);
   if (sim) requestAnimationFrame(tick);
@@ -667,10 +681,10 @@ async function reroute(me) {
     S.routes = { fast: S.sel === 'fast' ? nr : S.routes.fast, safe: S.sel === 'safe' ? nr : S.routes.safe };
     map.getSource('r-' + S.sel).setData(line(nr.coords));
     map.getSource('r-' + (S.sel === 'safe' ? 'fast' : 'safe')).setData(empty);
-    map.getSource('hot-route').setData({ type: 'FeatureCollection', features: nr.hot.map(x => { const h = S.hot[x.id]; return { type: 'Feature', properties: { id: h.id, n: h.n }, geometry: { type: 'Point', coordinates: [h.lon, h.lat] } }; }) });
+    map.getSource('hot-route').setData(zoneMarkers(nr));
     const cum = [0];
     for (let i = 1; i < nr.coords.length; i++) cum.push(cum[i - 1] + distM(nr.coords[i - 1], nr.coords[i]));
-    Object.assign(n, { r: nr, cum, total: cum[cum.length - 1], s: 0, idx: 0, si: 0, spoken: new Set(), voice: new Set(top3(nr).map(t => t.h.id)), key: '' });
+    Object.assign(n, { r: nr, cum, total: cum[cum.length - 1], s: 0, idx: 0, si: 0, said: new Set(), tz: topZones(nr), key: '' });
   } catch (e) { /* si riprova al prossimo rilevamento */ } finally { n.rerouting = false; n.off = 0; }
 }
 
@@ -709,7 +723,7 @@ function camera(p, dt) {
 function tick(now) {
   const n = S.nav; if (!n || !n.sim || n.done) return;
   const dt = Math.min(0.5, (now - n.last) / 1000); n.last = now;
-  const next = n.r.hot.find(h => n.voice.has(h.id) && h.at > n.s - 30);
+  const next = n.tz.find(z => z.end > n.s - 30);
   const d = next ? next.at - n.s : Infinity;
   const target = d < 300 ? 14 : 45 * (+QS.get('vel') || 1);   // ?vel=2 raddoppia la velocità tra un avviso e l'altro                    // rallenta prima dei punti da ricordare
   n.v += (target - n.v) * Math.min(1, dt * 2.5);
@@ -749,26 +763,20 @@ function updateNav(force) {
     if (dm <= 320 && dm > 110 && !st.v1) { st.v1 = true; say(`Tra ${fmtDist(dm).replace(' m', ' metri')}, ${stepText(st).replace(/^./, ch => ch.toLowerCase())}`); }
     else if (dm <= 45 && !st.v2) { st.v2 = true; say(stepText(st)); }
   }
-  // Punto critico in arrivo. Per i punti da ricordare: lo schermo lampeggia e si illumina, e per
-  // qualche secondo una card grande arancione prende il posto della svolta (che resta sotto, in piccolo).
-  // Poi rimane una striscia compatta finché il punto non è superato.
-  const next = n.r.hot.find(h => h.at > s - 25);
+  // Tratto critico in arrivo, solo per i tratti da ricordare: lo schermo lampeggia e si illumina e una card
+  // grande prende per qualche secondo il posto della svolta (che resta sotto, in piccolo).
+  // Poi rimane una striscia finché il tratto non è finito. Per i tratti minori non si mostra niente.
+  const z = n.tz.find(z => z.end > s - 25);
   let alerting = false;
-  if (next) {
-    const h = S.hot[next.id], d = Math.max(0, next.at - s);
-    if (d <= 260) {
-      const k = phraseKey(h), top = n.voice.has(next.id), sym = ALERT_ICON[k], lab = ALERT_LABEL[k];
-      if (!n.spoken.has(next.id)) {
-        n.spoken.add(next.id);
-        if (top) { n.bigUntil = now + 5000; flashScreen(); sayAlert(h); }
-      }
-      alerting = top;
-      if (top && now < n.bigUntil) {
-        html = bigCard(k, `tra ${fmtDist(d)} · ${esc(h.s1 || hname(h))}`)
-          + (st ? `<div class="manmini"><span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span></div>` : '');
-      } else {
-        html += stripCard(k, fmtDist(d), esc(h.s1 || hname(h)));
-      }
+  if (z && z.at - s <= 260) {
+    const d = Math.max(0, z.at - s), k = z.kind, name = esc(z.name);
+    if (!n.said.has(z)) { n.said.add(z); n.bigUntil = now + 5000; flashScreen(); sayKind(k); }
+    alerting = true;
+    if (now < n.bigUntil) {
+      html = bigCard(k, `${d > 0 ? 'tra ' + fmtDist(d) : 'adesso'} · ${name}`)
+        + (st ? `<div class="manmini"><span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span></div>` : '');
+    } else {
+      html += stripCard(k, d > 0 ? fmtDist(d) : `ancora ${fmtDist(Math.max(0, z.end - s))}`, name);
     }
   }
   setAlerting(alerting);
@@ -829,10 +837,10 @@ function navBarHtml() {
 function finishNav() {
   const n = S.nav; n.done = true;
   if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  const got = n.r.hot.length, fast = S.routes.fast.hot.length, card = $('#navcard');
+  const got = zones(n.r).length, fast = zones(S.routes.fast).length, card = $('#navcard');
   const cmp = S.sel === 'safe' && fast > got ? ` Con il percorso più veloce sarebbero stati ${fast}.` : '';
   card.className = '';
-  card.innerHTML = `<div class="man done"><div><div class="k">Sei arrivato</div><div class="name">${got === 0 ? 'Nessun punto critico attraversato.' : got === 1 ? 'Hai attraversato un punto critico.' : `Hai attraversato ${got} punti critici.`}${cmp}</div></div></div>`;
+  card.innerHTML = `<div class="man done"><div><div class="k">Sei arrivato</div><div class="name">${got === 0 ? 'Nessun tratto critico attraversato.' : got === 1 ? 'Hai attraversato un tratto critico.' : `Hai attraversato ${got} tratti critici.`}${cmp}</div></div></div>`;
   n.key = 'done';
   keepAwake(false);
   setAlerting(false);
@@ -893,7 +901,7 @@ function endDemoAlert() {
 // in simulazione: salta a poco prima del prossimo avviso (o della prossima svolta)
 function skipAhead() {
   const n = S.nav; if (!n || !n.sim || n.done) return;
-  const hot = n.r.hot.find(h => n.voice.has(h.id) && h.at - 320 > n.s);
+  const hot = n.tz.find(z => z.at - 320 > n.s);
   const st = (n.r.steps || []).find(x => x.at - 120 > n.s);
   const target = Math.min(hot ? hot.at - 320 : Infinity, st ? st.at - 120 : Infinity, n.total - 60);
   if (target > n.s) n.s = target;
