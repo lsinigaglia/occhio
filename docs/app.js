@@ -478,8 +478,7 @@ function rcard(k, r, label) {
   return `<button class="rcard ${k} ${S.sel === k ? 'sel' : ''}" type="button" data-sel="${k}">
     <span class="rlabel"><i></i>${label}</span><span class="rtime">${fmtMin(r.time)}</span>
     <span class="rsub">${fmtKm(r.dist)}${r.via[0] ? ' · ' + esc(r.via[0]) : ''}</span>
-    <span class="rstat"><b>${zones(r).length}</b> ${zones(r).length === 1 ? 'tratto critico' : 'tratti critici'}</span>
-    <span class="rstat"><b>${r.inc}</b> incidenti</span></button>`;
+    <span class="rstat"><b>${r.inc}</b> incidenti sul tragitto</span></button>`;
 }
 function previewHtml() {
   const { fast, safe } = S.routes, r = S.routes[S.sel];
@@ -487,7 +486,6 @@ function previewHtml() {
   if (safe) {
     const dm = Math.max(1, Math.round((safe.time - fast.time) / 60)), dh = zones(fast).length - zones(safe).length;
     const gains = [];
-    if (dh > 0) gains.push(dh + (dh === 1 ? ' tratto critico in meno' : ' tratti critici in meno'));
     if (safe.inc < fast.inc) gains.push(`−${pct(fast.inc - safe.inc, fast.inc)}% incidenti registrati`);
     h += `<p class="gain">Più prudente: +${dm} min, <b>${gains.join(', ') || 'meno incidenti gravi'}</b> sul tragitto.</p>`;
     h += `<div class="rcards">${rcard('safe', safe, 'Più prudente')}${rcard('fast', fast, 'Più veloce')}</div>`;
