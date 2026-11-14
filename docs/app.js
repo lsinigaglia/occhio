@@ -77,6 +77,10 @@ const appReady = Promise.all([mapReady, dataReady]).then(([, d]) => {
     map.addLayer({ id: `r-${id}-hit`, type: 'line', source: 'r-' + id, paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 28 } });
     map.on('click', `r-${id}-hit`, () => { if (S.mode === 'preview' && S.routes[id]) select(id); });
   }
+  // i tratti critici del percorso scelto, disegnati in arancione sopra la linea del percorso
+  map.addSource('r-zones', { type: 'geojson', data: empty });
+  map.addLayer({ id: 'r-zones-case', type: 'line', source: 'r-zones', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#111', 'line-width': 13 } });
+  map.addLayer({ id: 'r-zones-line', type: 'line', source: 'r-zones', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['case', ['get', 'top'], '#ff9800', '#ffd08a'], 'line-width': 9 } });
   const color = ['step', ['get', 'n'], '#f9ab00', 10, '#e8710a', 20, '#d93025'];
   map.addSource('hot', { type: 'geojson', data: { type: 'FeatureCollection', features: S.hot.map(h => ({ type: 'Feature', properties: { id: h.id, n: h.n }, geometry: { type: 'Point', coordinates: [h.lon, h.lat] } })) } });
   map.addLayer({
@@ -222,7 +226,30 @@ function zones(r) {
 const topZones = r => [...zones(r)].sort((a, b) => b.w - a.w).slice(0, r.dist < 4000 ? 3 : 4).sort((a, b) => a.at - b.at);
 const zclass = z => z.n >= 40 ? 'r' : z.n >= 20 ? 'o' : 'a';
 const zsub = z => (z.hs.length > 1 ? `${z.hs.length} punti vicini · ` : '') + `${z.n} incidenti`;
-const zoneMarkers = r => ({ type: 'FeatureCollection', features: zones(r).map(z => ({ type: 'Feature', properties: { id: z.main.id, n: z.n }, geometry: { type: 'Point', coordinates: [z.main.lon, z.main.lat] } })) });
+function routeCum(r) {
+  if (!r.cum) { r.cum = [0]; for (let i = 1; i < r.coords.length; i++) r.cum.push(r.cum[i - 1] + distM(r.coords[i - 1], r.coords[i])); }
+  return r.cum;
+}
+// il pezzo di percorso tra due distanze dalla partenza (in metri)
+function sliceRoute(r, a, b) {
+  const c = r.coords, cum = routeCum(r);
+  const at = d => {
+    let i = 0; while (i < cum.length - 2 && cum[i + 1] < d) i++;
+    const t = Math.min(1, Math.max(0, (d - cum[i]) / Math.max(1e-6, cum[i + 1] - cum[i])));
+    return [c[i][0] + (c[i + 1][0] - c[i][0]) * t, c[i][1] + (c[i + 1][1] - c[i][1]) * t];
+  };
+  a = Math.max(0, a); b = Math.min(cum[cum.length - 1], b);
+  const out = [at(a)];
+  for (let i = 0; i < c.length; i++) if (cum[i] > a && cum[i] < b) out.push(c[i]);
+  out.push(at(b));
+  return out;
+}
+// i tratti come linee colorate: arancione pieno quelli da ricordare, chiaro i minori
+function zoneLines(r) {
+  const tops = new Set(topZones(r));
+  return { type: 'FeatureCollection', features: zones(r).map(z => ({ type: 'Feature', properties: { top: tops.has(z) }, geometry: { type: 'LineString', coordinates: sliceRoute(r, z.at - 60, z.end + 60) } })) };
+}
+const zoneMarkers = r => ({ type: 'FeatureCollection', features: topZones(r).map(z => ({ type: 'Feature', properties: { id: z.main.id, n: z.n }, geometry: { type: 'Point', coordinates: [z.main.lon, z.main.lat] } })) });
 function grouped(h) {
   const m = new Map();
   for (const [n, k] of h.nat) { const l = natLabel(n); m.set(l, (m.get(l) || 0) + k); }
@@ -407,12 +434,13 @@ function select(k, doFit) {
   for (const s of ['case', 'line']) map.moveLayer(`r-${k}-${s}`, 'r-fast-hit');
   const r = S.routes[k];
   map.getSource('hot-route').setData(zoneMarkers(r));
+  map.getSource('r-zones').setData(zoneLines(r));
   render();
   if (doFit) setTimeout(fit, 120);
 }
 function wipeRoutes() {
   S.routes = null;
-  for (const id of ['r-fast', 'r-safe', 'hot-route']) { const src = map.getSource(id); if (src) src.setData(empty); }
+  for (const id of ['r-fast', 'r-safe', 'hot-route', 'r-zones']) { const src = map.getSource(id); if (src) src.setData(empty); }
   if (fromMarker) fromMarker.remove(); if (toMarker) toMarker.remove();
 }
 function clearRoutes() {
@@ -680,6 +708,7 @@ async function reroute(me) {
     map.getSource('r-' + S.sel).setData(line(nr.coords));
     map.getSource('r-' + (S.sel === 'safe' ? 'fast' : 'safe')).setData(empty);
     map.getSource('hot-route').setData(zoneMarkers(nr));
+    map.getSource('r-zones').setData(zoneLines(nr));
     const cum = [0];
     for (let i = 1; i < nr.coords.length; i++) cum.push(cum[i - 1] + distM(nr.coords[i - 1], nr.coords[i]));
     Object.assign(n, { r: nr, cum, total: cum[cum.length - 1], s: 0, idx: 0, si: 0, said: new Set(), tz: topZones(nr), key: '' });
@@ -721,9 +750,9 @@ function camera(p, dt) {
 function tick(now) {
   const n = S.nav; if (!n || !n.sim || n.done) return;
   const dt = Math.min(0.5, (now - n.last) / 1000); n.last = now;
-  const next = n.tz.find(z => z.end > n.s - 30);
+  const next = n.tz.find(z => z.at > n.s - 80);
   const d = next ? next.at - n.s : Infinity;
-  const target = d < 300 ? 14 : 45 * (+QS.get('vel') || 1);   // ?vel=2 raddoppia la velocità tra un avviso e l'altro                    // rallenta prima dei punti da ricordare
+  const target = d < 240 ? 16 : 110 * (+QS.get('vel') || 1);   // veloce tra un avviso e l'altro, lenta solo attorno all'avviso
   n.v += (target - n.v) * Math.min(1, dt * 2.5);
   n.s = Math.min(n.total, n.s + n.v * dt);
   camera(placeAt(n.s), dt);
