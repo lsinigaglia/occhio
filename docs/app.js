@@ -158,6 +158,9 @@ const alertLabel = h => ALERT_LABEL[phraseKey(h)].join(' ');
 // Avvisi con voce registrata (ElevenLabs): una clip per tipo di avviso ("Occhio ai pedoni").
 // audio/index.json dice quali clip esistono; dove ne manca una parla la voce del telefono.
 let CLIPS = null;
+// campioni di voce da ascoltare nella pagina di prova (audio/prove.json), per scegliere senza uscire dall'app
+let PROVE = [];
+fetch('audio/prove.json' + VQ).then(r => r.ok ? r.json() : []).then(j => { PROVE = j; if (S.mode === 'prova') render(); }).catch(() => {});
 fetch('audio/index.json' + VQ).then(r => r.ok ? r.json() : null)
   .then(j => { if (j) CLIPS = new Set(j.phrases); }).catch(() => {});
 const slug = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -531,6 +534,7 @@ $('#sheetc').onclick = e => {
   if (a === 'reload') location.reload();
   else if (a === 'prova') { setMode('prova'); $('#sheet').classList.add('full'); }
   else if (a === 'demo') demoAlert(t.dataset.k);
+  else if (a === 'clip') { player.onended = null; player.onerror = null; player.muted = false; player.src = t.dataset.src + VQ; const pr = player.play(); if (pr) pr.catch(() => toast('Non riesco a riprodurre questa clip')); }
   else if (a === 'stile' || a === 'voce' || a === 'testo') {
     if (a === 'stile') STYLE = t.dataset.k; else if (a === 'voce') VOICE = t.dataset.k; else SOLO = t.dataset.k === 'solo';
     try { localStorage.setItem({ stile: 'occhioStile', voce: 'occhioVoce', testo: 'occhioTesto' }[a], t.dataset.k); } catch (e) { /* vale solo per questa visita */ }
@@ -802,7 +806,7 @@ const labSize = t => { const w = Math.max(...t.split(' ').map(x => x.length)); r
 const ALERT_ICON = {
   auto: '<svg viewBox="0 0 24 24"><path d="M18.920 6.010C18.720 5.420 18.160 5 17.500 5h-11c-.660 0-1.210.420-1.420 1.010L3 12v8c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-1h12v1c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-8l-2.080-5.990zM6.500 16c-.830 0-1.500-.670-1.500-1.500S5.670 13 6.500 13s1.500.670 1.500 1.500S7.330 16 6.500 16zm11 0c-.830 0-1.500-.670-1.500-1.500s.670-1.500 1.500-1.500 1.500.670 1.500 1.500-.670 1.500-1.500 1.500zM5 11l1.500-4.500h11L19 11H5z"/></svg>',
   ped: '<svg viewBox="0 0 24 24"><path d="M13.500 5.500c1.100 0 2-.900 2-2s-.900-2-2-2-2 .900-2 2 .900 2 2 2zM9.800 8.900L7 23h2.100l1.800-8 2.100 2v6h2v-7.500l-2.100-2 .600-3C14.800 12 16.800 13 19 13v-2c-1.900 0-3.500-1-4.300-2.400l-1-1.600c-.400-.600-1-1-1.700-1-.300 0-.500.100-.800.100L6 8.300V13h2V9.600l1.800-.700"/></svg>',
-  buche: '<svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M7.500 2h9L22 22H2zM11.300 4h1.400v3h-1.400zM11.200 18h1.600v3h-1.600zM7.800 12.200l2.300-2.400 2 .900 2.200-1.300 2.100 2.300-.600 1.900 1.300 1.700-2.400 1.600-2.100-.700-2.300 1.300-1.900-1.900.500-1.800z"/></svg>',
+  buche: '<svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M0.700 13.200a11.300 6.600 0 1 0 22.600 0a11.300 6.600 0 1 0-22.600 0zM2.800 12.200a9.200 4.500 0 1 0 18.400 0a9.200 4.500 0 1 0-18.400 0z"/></svg>',
 };
 const flashEl = document.body.appendChild(Object.assign(document.createElement('div'), { id: 'flash' }));
 function flashScreen() {
@@ -865,6 +869,7 @@ function provaHtml() {
     <h3>Avvisi</h3>
     ${Object.keys(ALERT_LABEL).map(k => `<button class="demo" type="button" data-act="demo" data-k="${k}"><span class="sym">${ALERT_ICON[k]}</span>
       <span class="hmain"><b>${esc(ALERT_LABEL[k].join(' '))}</b><span>${esc(PHRASES[k])} · ${count[k] || 0} punti</span></span></button>`).join('')}
+    ${PROVE.length ? '<h3>Prove di voce</h3>' + PROVE.map(x => `<button class="hrow" type="button" data-act="clip" data-src="${esc(x.f)}"><span class="badge o">▶</span><span class="hmain"><b>${esc(x.t)}</b></span></button>`).join('') : ''}
     <p class="note">Versione ${esc(window.OCCHIO_V || 'locale')}. Voce: ${CLIPS ? 'registrata' : 'del telefono'}.</p>`;
 }
 let demoT = null;
