@@ -144,19 +144,13 @@ function advice(h) {
 // Tipi di avviso. Il tipo dipende dalla dinamica più frequente degli incidenti in quel punto.
 // PHRASES spiega in poche parole cosa succede lì; ALERT_LABEL è la scritta della card.
 const PHRASES = {
-  ped: 'qui attraversano in tanti', prec: "c'è chi non dà la precedenza", corsia: 'auto che si spostano senza guardare',
-  tamp: 'si frena di colpo, tieni la distanza', buche: 'buche e ostacoli sul fondo',
-  sosta: 'portiere e ripartenze dalle auto in sosta', rot: 'guarda chi entra in rotatoria',
+  auto: 'scontri frequenti tra veicoli', ped: 'qui attraversano in tanti', buche: 'buche e ostacoli sul fondo',
 };
 function phraseKey(h) {
   const g = grouped(h)[0], l = g ? g[0] : '';
   if (l.startsWith('Investimenti')) return 'ped';
-  if (l.startsWith('Tamponamenti')) return 'tamp';
-  if (l.startsWith('Urti contro veicoli')) return 'sosta';
-  if (l.startsWith('Urti contro') || l.startsWith('Cadute') || l.startsWith('Uscite')) return 'buche';
-  if (/rotatoria/i.test(h.part || '')) return 'rot';
-  if (l.startsWith('Scontri laterali') || l.startsWith('Scontri frontali')) return 'corsia';
-  return 'prec';
+  if (l.startsWith('Urti contro ostacoli') || l.startsWith('Urti contro buche') || l.startsWith('Cadute') || l.startsWith('Uscite')) return 'buche';
+  return 'auto';
 }
 const phrase = h => PHRASES[phraseKey(h)];
 const alertLabel = h => ALERT_LABEL[phraseKey(h)].join(' ');
@@ -763,21 +757,13 @@ function updateNav(force) {
 
 // --- avviso per chi guida: poche parole grandi, un simbolo, tutto lo schermo che si accende
 // [riga piccola, parola grande]: si legge "Occhio ai pedoni", con la parola chiave in evidenza
-const ALERT_LABEL = {
-  ped: ['Occhio ai', 'pedoni'], prec: ['Occhio alle', 'precedenze'], corsia: ['Occhio a chi', 'cambia corsia'],
-  tamp: ['Occhio ai', 'tamponamenti'], buche: ['Occhio alle', 'buche'], sosta: ['Occhio alle', 'auto in sosta'],
-  rot: ['Occhio in', 'rotatoria'],
-};
+const ALERT_LABEL = { auto: ['Occhio alle', 'macchine'], ped: ['Occhio ai', 'pedoni'], buche: ['Occhio alle', 'buche'] };
 // la parola grande si rimpicciolisce quanto basta per stare su una riga
 const labSize = t => { const w = Math.max(...t.split(' ').map(x => x.length)); return w <= 7 ? '' : w <= 10 ? 'm' : 's'; };
 const ALERT_ICON = {
+  auto: '<svg viewBox="0 0 24 24"><path d="M18.920 6.010C18.720 5.420 18.160 5 17.500 5h-11c-.660 0-1.210.420-1.420 1.010L3 12v8c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-1h12v1c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-8l-2.080-5.990zM6.500 16c-.830 0-1.500-.670-1.500-1.500S5.670 13 6.500 13s1.500.670 1.500 1.500S7.330 16 6.500 16zm11 0c-.830 0-1.500-.670-1.500-1.500s.670-1.500 1.500-1.500 1.500.670 1.500 1.500-.670 1.500-1.500 1.500zM5 11l1.500-4.500h11L19 11H5z"/></svg>',
   ped: '<svg viewBox="0 0 24 24"><path d="M13.500 5.500c1.100 0 2-.900 2-2s-.900-2-2-2-2 .900-2 2 .900 2 2 2zM9.800 8.900L7 23h2.100l1.800-8 2.100 2v6h2v-7.500l-2.100-2 .600-3C14.800 12 16.800 13 19 13v-2c-1.900 0-3.500-1-4.300-2.400l-1-1.600c-.400-.600-1-1-1.700-1-.300 0-.500.100-.800.100L6 8.300V13h2V9.600l1.800-.700"/></svg>',
-  prec: '<svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M1 3h22L12 21.500zM5.200 5.500h13.600L12 16.700z"/></svg>',
-  corsia: '<svg viewBox="0 0 24 24"><path d="M18 4l-4 4h3v7c0 1.100-.900 2-2 2s-2-.900-2-2V8c0-2.210-1.790-4-4-4S5 5.790 5 8v7H2l4 4 4-4H7V8c0-1.100.900-2 2-2s2 .900 2 2v7c0 2.210 1.790 4 4 4s4-1.790 4-4V8h3l-4-4z"/></svg>',
-  tamp: '<svg viewBox="0 0 24 24"><path d="M18.920 6.010C18.720 5.420 18.160 5 17.500 5h-11c-.660 0-1.210.420-1.420 1.010L3 12v8c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-1h12v1c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-8l-2.080-5.990zM6.500 16c-.830 0-1.500-.670-1.500-1.500S5.670 13 6.500 13s1.500.670 1.500 1.500S7.330 16 6.500 16zm11 0c-.830 0-1.500-.670-1.500-1.500s.670-1.500 1.500-1.500 1.500.670 1.500 1.500-.670 1.500-1.500 1.500zM5 11l1.500-4.500h11L19 11H5z"/></svg>',
   buche: '<svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
-  sosta: '<svg viewBox="0 0 24 24"><path d="M13 3H6v18h4v-6h3c3.310 0 6-2.690 6-6s-2.690-6-6-6zm.200 8H10V7h3.200c1.100 0 2 .900 2 2s-.900 2-2 2z"/></svg>',
-  rot: '<svg viewBox="0 0 24 24"><path d="M12 6v3l4-4-4-4v3c-4.420 0-8 3.580-8 8 0 1.570.460 3.030 1.240 4.260L6.700 14.800c-.450-.830-.700-1.790-.700-2.800 0-3.310 2.690-6 6-6zm6.760 1.740L17.300 9.200c.440.840.700 1.790.700 2.800 0 3.310-2.690 6-6 6v-3l-4 4 4 4v-3c4.420 0 8-3.580 8-8 0-1.570-.460-3.030-1.240-4.260z"/></svg>',
 };
 const flashEl = document.body.appendChild(Object.assign(document.createElement('div'), { id: 'flash' }));
 function flashScreen() {

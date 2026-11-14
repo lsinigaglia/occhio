@@ -19,13 +19,9 @@ AUDIO = os.path.join(ROOT, 'docs', 'audio')
 
 # le stesse chiavi usate in docs/app.js (PHRASES)
 PHRASES = {
+    'auto': 'Occhio alle macchine.',
     'ped': 'Occhio ai pedoni.',
-    'prec': 'Occhio alle precedenze.',
-    'corsia': 'Occhio a chi cambia corsia.',
-    'tamp': 'Occhio ai tamponamenti.',
     'buche': 'Occhio alle buche.',
-    'sosta': 'Occhio alle auto in sosta.',
-    'rot': 'Occhio in rotatoria.',
 }
 ROMAN = {'Ii': 'Secondo', 'Iii': 'Terzo', 'Iv': 'Quattro', 'Vi': 'Sesto', 'Xii': 'Dodicesimo', 'Xx': 'Venti',
          'Xxi': 'Ventuno', 'Xxiii': 'Ventitreesimo', 'Xxiv': 'Ventiquattro', 'Xxv': 'Venticinque'}

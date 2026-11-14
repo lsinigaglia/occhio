@@ -278,7 +278,7 @@ public class AlertService extends Service implements LocationListener {
 
         ImageView icon = new ImageView(this);
         icon.setImageResource("ped".equals(a.kind) ? R.drawable.ic_alert_ped
-                : "corsia".equals(a.kind) || "prec".equals(a.kind) || "rot".equals(a.kind) ? R.drawable.ic_alert_turn : R.drawable.ic_alert_warn);
+                : "auto".equals(a.kind) ? R.drawable.ic_alert_car : R.drawable.ic_alert_warn);
         root.addView(icon, new LinearLayout.LayoutParams((int) (170 * dp), (int) (170 * dp)));
 
         TextView big = new TextView(this);
