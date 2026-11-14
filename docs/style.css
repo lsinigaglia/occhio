@@ -270,3 +270,7 @@ button.chip { border: 0; font: inherit; font-size: 14px; padding: 8px 14px; bord
 .facts { margin: 14px 0 0; font-size: 15px; color: var(--ink2); line-height: 1.4; }
 .facts b { color: var(--ink); font-weight: 600; }
 .keep .say::first-letter { text-transform: none; }
+
+.watch { align-items: center; }
+.watch p { font-size: 26px; font-weight: 700; line-height: 1.15; margin: 0; }
+.watch small { margin-top: 4px; font-size: 15px; }

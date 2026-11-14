@@ -506,7 +506,7 @@ function rcard(k, r, label) {
   return `<button class="rcard ${k} ${S.sel === k ? 'sel' : ''}" type="button" data-sel="${k}">
     <span class="rlabel"><i></i>${label}</span><span class="rtime">${fmtMin(r.time)}</span>
     <span class="rsub">${fmtKm(r.dist)}${r.via[0] ? ' · ' + esc(r.via[0]) : ''}</span>
-    <span class="rstat"><b>${r.inc}</b> incidenti per strada</span></button>`;
+    <span class="rstat"><b>${r.inc}</b> incidenti</span></button>`;
 }
 function previewHtml() {
   const { fast, safe } = S.routes, r = S.routes[S.sel];
@@ -514,8 +514,8 @@ function previewHtml() {
   if (safe) {
     const dm = Math.max(1, Math.round((safe.time - fast.time) / 60)), dh = zones(fast).length - zones(safe).length;
     const gains = [];
-    if (safe.inc < fast.inc) gains.push(`${pct(fast.inc - safe.inc, fast.inc)}% di incidenti in meno`);
-    h += `<p class="gain">Più prudente: ${dm} min in più, <b>${gains.join(', ') || 'meno incidenti gravi'}</b>.</p>`;
+    if (safe.inc < fast.inc) gains.push(`−${pct(fast.inc - safe.inc, fast.inc)}% incidenti`);
+    h += `<p class="gain">Più prudente: +${dm} min, <b>${gains.join(', ') || 'meno incidenti gravi'}</b>.</p>`;
     h += `<div class="rcards">${rcard('safe', safe, 'Più prudente')}${rcard('fast', fast, 'Più veloce')}</div>`;
   } else {
     h += `<p class="gain">Qui la strada più veloce è anche la più tranquilla.</p><div class="rcards one">${rcard('fast', fast, 'Percorso consigliato')}</div>`;
@@ -527,28 +527,28 @@ function previewHtml() {
   const top = topZones(r), all = zones(r);
   if (!all.length) h += '<h3>Nessun tratto critico sul percorso</h3>';
   else {
-    h += `<h3>${top.length === 1 ? 'Il tratto a cui stare attento' : `I ${top.length} tratti a cui stare attento`}</h3>`;
+    h += '<h3>Dove stare attento</h3>';
     for (const z of top) {
       h += `<button class="keep" type="button" data-hot="${z.main.id}"><span class="badge ${zclass(z)}">${z.n}</span>
-        <span class="hmain"><b>${esc(z.name)}</b><span class="say">Occhio a ${esc(zoneStats(z).watch[0])}</span></span><span class="hdist">${fmtDist(z.at)}</span></button>`;
+        <span class="hmain"><b>${esc(z.name)}</b><span class="say">${esc(zoneStats(z).watch[0])}</span></span><span class="hdist">${fmtDist(z.at)}</span></button>`;
     }
-    h += `<p class="note" style="margin:8px 0 0">Ti avviso solo prima di questi.</p>`;
+    h += `<p class="note" style="margin:8px 0 0">Ti avviso io quando ci arrivi.</p>`;
   }
-  h += `<p class="note">Dati della Polizia Locale, ${period()}.</p>`;
+  h += `<p class="note">Dati Polizia Locale, ${period()}.</p>`;
   return h;
 }
-// A cosa stare attento, detto come lo si direbbe a voce. Ogni frase completa "Occhio a…".
+// A cosa stare attento: una frase sola, corta, come la si direbbe a voce.
 const WATCH = {
-  'Scontri in svolta o immissione': 'chi ti taglia la strada agli incroci',
-  'Scontri laterali': 'chi ti stringe di lato',
-  'Scontri frontali': 'chi invade la tua corsia',
-  'Tamponamenti': 'chi frena di colpo',
-  'Investimenti di pedoni': 'chi attraversa a piedi',
-  'Urti contro veicoli fermi o in sosta': 'portiere e auto che ripartono',
-  'Urti contro ostacoli': 'buche e ostacoli',
-  'Urti contro buche': 'le buche',
-  'Cadute e frenate improvvise': 'il fondo: qui si scivola',
-  'Uscite di strada': 'la curva: vai piano',
+  'Scontri in svolta o immissione': 'Occhio agli incroci',
+  'Scontri laterali': 'Occhio a chi ti stringe',
+  'Scontri frontali': 'Occhio ai sorpassi',
+  'Tamponamenti': 'Occhio alle frenate',
+  'Investimenti di pedoni': 'Occhio ai pedoni',
+  'Urti contro veicoli fermi o in sosta': 'Occhio alle portiere',
+  'Urti contro ostacoli': 'Occhio alle buche',
+  'Urti contro buche': 'Occhio alle buche',
+  'Cadute e frenate improvvise': 'Occhio: si scivola',
+  'Uscite di strada': 'Occhio alla curva',
 };
 // Mette insieme i punti di un tratto: numeri, tipi di incidente, condizioni.
 function zoneStats(z) {
@@ -561,9 +561,8 @@ function zoneStats(z) {
   }
   t.nat = [...t.nat.entries()].sort((a, b) => b[1] - a[1]);
   const tot = t.nat.reduce((a, b) => a + b[1], 0) || 1;
-  // le prime una o due cose a cui stare attento (la seconda solo se pesa almeno un quarto)
-  t.watch = t.nat.filter((x, i) => WATCH[x[0]] && (i === 0 || x[1] / tot >= 0.25)).slice(0, 2).map(x => WATCH[x[0]]);
-  if (!t.watch.length) t.watch = ['questo tratto: vai piano'];
+  // una cosa sola a cui stare attento: quella che lì succede più spesso
+  t.watch = [(t.nat.find(x => WATCH[x[0]]) || [])[0]].map(l => WATCH[l] || 'Occhio: vai piano');
   t.when = [];
   if (pct(t.punta, t.n) >= 50) t.when.push("all'ora di punta");
   if (pct(t.notte, t.n) >= 35) t.when.push('di sera');
@@ -574,15 +573,13 @@ function hotHtml(z) {
   const t = zoneStats(z), len = z.end - z.at;
   const facts = [`<b>${t.n} incidenti</b> in ${S.meta.mesi} mesi`];
   if (t.tw) facts.push(`${t.tw} in moto o bici`);
-  if (t.feriti) facts.push(`${t.feriti} con feriti`);
   if (t.morti) facts.push(`${t.morti} ${t.morti === 1 ? 'morto' : 'morti'}`);
   return `<div class="dhead"><button class="iconbtn" type="button" data-act="hotback">${ICON.back}</button><div><h2>${esc(z.name)}</h2>${z.hs.length > 1 ? `<p class="sub">Un tratto di ${fmtDist(Math.max(100, len))}</p>` : ''}</div></div>
-    <div class="watch"><span class="sym">${ALERT_ICON[z.kind]}</span><div><b>Occhio a</b>
-      ${t.watch.map(w => `<p>${esc(w)}</p>`).join('')}
-      ${t.when.length ? `<small>Peggio ${esc(t.when.join(' e '))}.</small>` : ''}</div></div>
+    <div class="watch"><span class="sym">${ALERT_ICON[z.kind]}</span><div><p>${esc(t.watch[0])}</p>
+      ${t.when.length ? `<small>Peggio ${esc(t.when[0])}.</small>` : ''}</div></div>
     ${t.nota ? `<div class="update"><b>Aggiornamento</b>${esc(t.nota.testo)}<a href="${esc(t.nota.url)}" target="_blank" rel="noopener">${esc(t.nota.fonte)}</a></div>` : ''}
     <p class="facts">${facts.join(' · ')}</p>
-    <p class="note">Dati della Polizia Locale, ${period()}. La strada può essere cambiata nel frattempo.</p>`;
+    <p class="note">Dati Polizia Locale, ${period()}.</p>`;
 }
 // Apre la scheda: se il punto fa parte di un tratto del percorso scelto si apre il tratto intero.
 function openHot(id) {
@@ -677,7 +674,7 @@ function bgHtml() {
     <div class="actions" style="margin-bottom:4px"><button class="btn primary" type="button" data-act="gnav">${ICON.nav}Apri Google Maps</button>
     <button class="btn danger" type="button" data-act="bgstop">Termina</button></div>
     ${full ? '' : `<div class="advice">${ICON.bulb}<div>Per l'avviso grande a tutto schermo, consenti a Occhio di comparire sopra le altre app. <button class="link" style="padding:6px 0 0;display:block" type="button" data-act="overlay">Attiva</button></div></div>`}
-    ${top.map(z => `<div class="keep"><span class="badge ${zclass(z)}">${z.n}</span><span class="hmain"><b>${esc(z.name)}</b><span class="say">Occhio a ${esc(zoneStats(z).watch[0])}</span></span></div>`).join('')}`;
+    ${top.map(z => `<div class="keep"><span class="badge ${zclass(z)}">${z.n}</span><span class="hmain"><b>${esc(z.name)}</b><span class="say">${esc(zoneStats(z).watch[0])}</span></span></div>`).join('')}`;
 }
 
 /* ------------------------------------------------------------------ viaggio */
