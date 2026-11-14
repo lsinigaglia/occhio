@@ -545,7 +545,7 @@ function previewHtml() {
 // A cosa stare attento: una frase sola, corta, come la si direbbe a voce.
 const WATCH = {
   'Scontri in svolta o immissione': 'Occhio agli incroci',
-  'Scontri laterali': 'Occhio a chi ti stringe',
+  'Scontri laterali': 'Occhio alle macchine',
   'Scontri frontali': 'Occhio ai sorpassi',
   'Tamponamenti': 'Occhio alle frenate',
   'Investimenti di pedoni': 'Occhio ai pedoni',
