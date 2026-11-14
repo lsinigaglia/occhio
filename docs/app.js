@@ -973,6 +973,13 @@ function skipAhead() {
   if (target > n.s) n.s = target;
 }
 
+/* un po' di romano: la domanda nella barra di ricerca cambia a ogni apertura */
+{
+  const ask = Math.random() < 0.5 ? "'Ndo vai?" : "'Ndo devi annà?";
+  $('#pilltext').textContent = ask;
+  $('#ito').placeholder = ask;
+}
+
 /* avvio */
 // Link diretto a un tragitto: ?a=lat,lon,Nome per l'arrivo e, volendo, ?da=lat,lon,Nome per la partenza
 // (senza "da" si parte dalla posizione attuale). Con &sim=1 parte subito la simulazione.
