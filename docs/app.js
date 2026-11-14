@@ -143,7 +143,7 @@ function advice(h) {
 // Tipi di avviso. Il tipo dipende dalla dinamica più frequente degli incidenti in quel punto.
 // PHRASES spiega in poche parole cosa succede lì; ALERT_LABEL è la scritta della card.
 const PHRASES = {
-  ped: 'qui attraversano in tanti', prec: "c'è chi non dà la precedenza", corsia: 'cambi di corsia improvvisi',
+  ped: 'qui attraversano in tanti', prec: "c'è chi non dà la precedenza", corsia: 'auto che si spostano senza guardare',
   tamp: 'si frena di colpo, tieni la distanza', buche: 'buche e ostacoli sul fondo',
   sosta: 'portiere e ripartenze dalle auto in sosta', rot: 'guarda chi entra in rotatoria',
 };
