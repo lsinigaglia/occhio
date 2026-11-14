@@ -711,7 +711,7 @@ function tick(now) {
   const dt = Math.min(0.5, (now - n.last) / 1000); n.last = now;
   const next = n.r.hot.find(h => n.voice.has(h.id) && h.at > n.s - 30);
   const d = next ? next.at - n.s : Infinity;
-  const target = d < 300 ? 14 : 45;                    // rallenta prima dei punti da ricordare
+  const target = d < 300 ? 14 : 45 * (+QS.get('vel') || 1);   // ?vel=2 raddoppia la velocità tra un avviso e l'altro                    // rallenta prima dei punti da ricordare
   n.v += (target - n.v) * Math.min(1, dt * 2.5);
   n.s = Math.min(n.total, n.s + n.v * dt);
   camera(placeAt(n.s), dt);
