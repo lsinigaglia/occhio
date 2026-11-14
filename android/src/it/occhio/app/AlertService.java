@@ -256,7 +256,7 @@ public class AlertService extends Service implements LocationListener {
                 .build();
         nm.notify(100 + fired++, n);
         showCard(a, m);
-        if (!playClips(a)) speak(a.label + ". " + a.name);
+        if (!playClips(a)) speak(a.label);
         Log.i(TAG, "avviso: " + text + " a " + m + " m");
     }
 

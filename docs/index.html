@@ -10,7 +10,6 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="map"></div>
@@ -65,6 +64,17 @@
 <div id="toast" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js"></script>
+<script>
+// Il sito resta in memoria nel browser fino a 10 minuti. Per vedere subito ogni modifica,
+// si chiede il numero di versione senza passare dalla memoria e lo si attacca ai file.
+fetch('version.json?' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); })
+  .catch(function () { return { v: '' }; })
+  .then(function (j) {
+    window.OCCHIO_V = j.v || '';
+    var q = OCCHIO_V ? '?v=' + encodeURIComponent(OCCHIO_V) : '';
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'style.css' + q; document.head.appendChild(l);
+    var s = document.createElement('script'); s.src = 'app.js' + q; document.body.appendChild(s);
+  });
+</script>
 </body>
 </html>

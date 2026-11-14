@@ -23,8 +23,8 @@ const distM = (la1, lo1, la2, lo2) => Math.hypot((lo2 - lo1) * MX, (la2 - la1) *
 
 async function init() {
   const [g, h] = await Promise.all([
-    fetch('data/graph.json').then(r => r.json()),
-    fetch('data/hotspots.json').then(r => r.json()),
+    fetch('data/graph.json' + self.location.search).then(r => r.json()),
+    fetch('data/hotspots.json' + self.location.search).then(r => r.json()),
   ]);
   G = g; HOT = h.items;
   N = G.lat.length; E = G.a.length;

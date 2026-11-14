@@ -35,7 +35,8 @@ const S = {
 };
 
 /* ------------------------------------------------------------------ worker */
-const worker = new Worker('worker.js');
+const VQ = window.OCCHIO_V ? '?v=' + encodeURIComponent(window.OCCHIO_V) : '';   // versione pubblicata, per non usare file vecchi
+const worker = new Worker('worker.js' + VQ);
 let seq = 0; const pending = new Map();
 worker.onmessage = e => {
   const { id, r, err } = e.data, p = pending.get(id); if (!p) return;
@@ -93,7 +94,7 @@ const appReady = Promise.all([mapReady, dataReady]).then(([, d]) => {
   }
   render();
   // aggiornamenti verificati sui singoli punti critici (cosa è cambiato dopo il periodo dei dati)
-  fetch('data/notes.json').then(r => r.json()).then(notes => {
+  fetch('data/notes.json' + VQ).then(r => r.json()).then(notes => {
     for (const n of notes) {
       let best = null, bd = 80;
       for (const h of S.hot) { const d = distM([n.lon, n.lat], [h.lon, h.lat]); if (d < bd) { bd = d; best = h; } }
@@ -160,31 +161,28 @@ function phraseKey(h) {
 const phrase = h => PHRASES[phraseKey(h)];
 const alertLabel = h => ALERT_LABEL[phraseKey(h)].join(' ');
 
-// Avvisi con voce registrata (ElevenLabs): "Occhio" + nome della strada + mezza frase.
+// Avvisi con voce registrata (ElevenLabs): una clip per tipo di avviso ("Occhio ai pedoni").
 // audio/index.json dice quali clip esistono; dove ne manca una parla la voce del telefono.
 let CLIPS = null;
-fetch('audio/index.json').then(r => r.ok ? r.json() : null)
-  .then(j => { if (j) CLIPS = { names: new Set(j.names), phrases: new Set(j.phrases) }; }).catch(() => {});
+fetch('audio/index.json' + VQ).then(r => r.ok ? r.json() : null)
+  .then(j => { if (j) CLIPS = new Set(j.phrases); }).catch(() => {});
 const slug = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-function alertClips(h) {
-  if (!CLIPS || !h.s1) return null;
-  const n = slug(h.s1), p = phraseKey(h);
-  if (!CLIPS.names.has(n) || !CLIPS.phrases.has(p)) return null;
-  return [`audio/p/${p}.mp3`, `audio/n/${n}.mp3`];
-}
+const clipFor = k => CLIPS && CLIPS.has(k) ? [`audio/p/${k}.mp3${VQ}`] : null;
+const alertClips = h => clipFor(phraseKey(h));
 const player = new Audio();
 // i browser lasciano partire l'audio solo dopo un tocco: lo si sblocca al tocco su Avvia o Simula
 function unlockAudio() {
   if (!CLIPS) return;
   try {
-    player.muted = true; player.src = 'audio/p/ped.mp3';
+    player.muted = true; player.src = 'audio/p/ped.mp3' + VQ;
     const p = player.play();
     if (p) p.then(() => { player.pause(); player.muted = false; }).catch(() => { player.muted = false; });
   } catch (e) { /* si userà la voce del telefono */ }
 }
-function sayAlert(h) {
+const sayAlert = h => sayKind(phraseKey(h));
+function sayKind(k) {
   if (S.mute) return;
-  const text = `${alertLabel(h)}. ${h.s1 || hname(h)}.`, clips = alertClips(h);
+  const text = ALERT_LABEL[k].join(' ') + '.', clips = clipFor(k);
   if (!clips) return say(text);
   let i = 0;
   const fail = () => { player.onended = null; player.onerror = null; say(text); };
@@ -407,6 +405,7 @@ function setMode(m) {
   const trip = m === 'preview' || m === 'loading' || m === 'bg' || (m === 'hot' && S.routes);
   $('#pill').hidden = !!trip; $('#trip').hidden = !trip;
   $('#navcard').hidden = m !== 'nav';
+  if (m !== 'prova') endDemoAlert();
   $('#sheet').classList.remove('full');
   if (S.ready && map.getLayer('hot')) map.setPaintProperty('hot', 'circle-opacity', m === 'home' || (m === 'hot' && !S.routes) ? 0.6 : 0.18);
   render();
@@ -425,6 +424,7 @@ function render() {
   else if (S.mode === 'preview') c.innerHTML = previewHtml();
   else if (S.mode === 'hot') c.innerHTML = hotHtml(S.hot[S.hotId]);
   else if (S.mode === 'about') c.innerHTML = aboutHtml();
+  else if (S.mode === 'prova') c.innerHTML = provaHtml();
   else if (S.mode === 'nav') c.innerHTML = navBarHtml();
   else if (S.mode === 'bg') c.innerHTML = bgHtml();
   c.scrollTop = 0;
@@ -435,6 +435,7 @@ function homeHtml() {
   return `<div class="peek"><div class="peekrow"><div><b>${S.hot.length} punti critici a Roma</b>
     <p>Incidenti rilevati dalla Polizia Locale, ${period()}</p></div>
     <button class="link" type="button" data-act="about">Come funziona</button></div>
+    <button class="link" style="padding:8px 0 0" type="button" data-act="prova">Prova gli avvisi</button>
     <div class="legend"><span><i style="background:#f9ab00"></i>8–9 incidenti</span><span><i style="background:#e8710a"></i>10–19</span><span><i style="background:#d93025"></i>20 o più</span></div></div>`;
 }
 function aboutHtml() {
@@ -524,6 +525,9 @@ $('#sheetc').onclick = e => {
   if (t.dataset.hot) return openHot(+t.dataset.hot);
   const a = t.dataset.act;
   if (a === 'reload') location.reload();
+  else if (a === 'prova') { setMode('prova'); $('#sheet').classList.add('full'); }
+  else if (a === 'demo') demoAlert(t.dataset.k);
+  else if (a === 'skip') skipAhead();
   else if (a === 'about') setMode('about');
   else if (a === 'home') setMode('home');
   else if (a === 'hotback') { setMode(S.prev || 'home'); if (S.routes) fit(); else map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 }); }
@@ -789,6 +793,7 @@ function setAlerting(on) {
 }
 function navBarHtml() {
   return `<div class="navbar"><div class="eta" id="eta"></div>
+    ${S.nav && S.nav.sim ? '<button class="btn ghost" type="button" data-act="skip" aria-label="Salta al prossimo avviso">⏭</button>' : ''}
     <button class="btn ghost" type="button" data-act="mute" aria-label="Voce">${S.mute ? ICON.mute : ICON.vol}</button>
     <button class="btn danger" type="button" data-act="exit">Esci</button></div>`;
 }
@@ -823,7 +828,46 @@ document.addEventListener('visibilitychange', () => {
   if (!NATIVE.isActive()) setMode('preview'); else render();   // il permesso per l'avviso grande può essere cambiato nel frattempo
 });
 
+/* ------------------------------------------------------------------ prova degli avvisi */
+// Una pagina per vedere e sentire ogni avviso in pochi secondi, senza fare un viaggio.
+function provaHtml() {
+  const count = {};
+  for (const h of S.hot) { const k = phraseKey(h); count[k] = (count[k] || 0) + 1; }
+  return `<div class="dhead"><button class="iconbtn" type="button" data-act="home">${ICON.back}</button><div><h2>Prova gli avvisi</h2>
+    <p class="sub">Tocca un avviso per vederlo e sentirlo com'è durante il viaggio.</p></div></div>
+    ${Object.keys(ALERT_LABEL).map(k => `<button class="demo" type="button" data-act="demo" data-k="${k}"><span class="sym">${ALERT_ICON[k]}</span>
+      <span class="hmain"><b>${esc(ALERT_LABEL[k].join(' '))}</b><span>${esc(PHRASES[k])} · ${count[k] || 0} punti</span></span></button>`).join('')}
+    <p class="note">Versione ${esc(window.OCCHIO_V || 'locale')}. Voce: ${CLIPS ? 'registrata' : 'del telefono'}.</p>`;
+}
+let demoT = null;
+function demoAlert(k) {
+  const card = $('#navcard'), lab = ALERT_LABEL[k];
+  clearTimeout(demoT);
+  card.hidden = false; card.className = '';
+  card.innerHTML = `<div class="occbig"><span class="sym">${ALERT_ICON[k]}</span><div><div class="pre">${esc(lab[0])}</div><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">tra 200 m · Via Marmorata</div></div></div>`;
+  flashScreen(); setAlerting(true);
+  player.muted = false; sayKind(k);
+  demoT = setTimeout(() => {
+    card.innerHTML = `<div class="occ"><span class="sym">${ALERT_ICON[k]}</span><div><b>${esc(lab.join(' '))} · 150 m</b>Via Marmorata</div></div>`;
+    demoT = setTimeout(endDemoAlert, 3000);
+  }, 5000);
+}
+function endDemoAlert() {
+  if (demoT === null) return;
+  clearTimeout(demoT); demoT = null;
+  if (S.mode !== 'nav') { $('#navcard').hidden = true; setAlerting(false); }
+}
+// in simulazione: salta a poco prima del prossimo avviso (o della prossima svolta)
+function skipAhead() {
+  const n = S.nav; if (!n || !n.sim || n.done) return;
+  const hot = n.r.hot.find(h => n.voice.has(h.id) && h.at - 320 > n.s);
+  const st = (n.r.steps || []).find(x => x.at - 120 > n.s);
+  const target = Math.min(hot ? hot.at - 320 : Infinity, st ? st.at - 120 : Infinity, n.total - 60);
+  if (target > n.s) n.s = target;
+}
+
 /* avvio */
+if (new URLSearchParams(location.search).has('prova')) appReady.then(() => { setMode('prova'); $('#sheet').classList.add('full'); });
 render();
 if (navigator.permissions && navigator.permissions.query) {
   navigator.permissions.query({ name: 'geolocation' }).then(p => { if (p.state === 'granted') locate(false); }).catch(() => {});

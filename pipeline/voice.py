@@ -84,8 +84,6 @@ def main():
         wanted = {slug(x) for x in a.only.split('|')}
         names = [n for n in names if slug(n) in wanted]
     jobs = [(f'p/{k}.mp3', t) for k, t in PHRASES.items()]
-    jobs += [(f'n/{slug(n)}.mp3', spoken(n)) for n in names]
-    os.makedirs(os.path.join(AUDIO, 'n'), exist_ok=True)
     os.makedirs(os.path.join(AUDIO, 'p'), exist_ok=True)
     made = chars = 0
     for rel, text in jobs:
@@ -104,12 +102,11 @@ def main():
         print(rel, '<-', text)
     index = {
         'voice': a.voice, 'model': a.model,
-        'names': sorted(f[:-4] for f in os.listdir(os.path.join(AUDIO, 'n')) if f.endswith('.mp3')),
         'phrases': sorted(f[:-4] for f in os.listdir(os.path.join(AUDIO, 'p')) if f.endswith('.mp3')),
     }
     with open(os.path.join(AUDIO, 'index.json'), 'w', encoding='utf-8') as fh:
         json.dump(index, fh)
-    print(f'generate {made} clip ({chars} caratteri); in totale {len(index["names"])} nomi e {len(index["phrases"])} frasi')
+    print(f'generate {made} clip ({chars} caratteri); in totale {len(index["phrases"])} frasi')
 
 
 if __name__ == '__main__':
