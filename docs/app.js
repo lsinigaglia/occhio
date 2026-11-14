@@ -197,6 +197,18 @@ function unlockAudio() {
   } catch (e) { /* si userà la voce del telefono */ }
 }
 const sayAlert = h => sayKind(phraseKey(h));
+// Messaggi di servizio registrati ("Partiamo", "Sei arrivato"): si sentono anche con le indicazioni spente,
+// perché sono la stessa voce di "Occhio". Se la clip manca resta la frase letta dal telefono (se accesa).
+function sayClip(k, text) {
+  const clips = clipFor(k);
+  if (!clips) return say(text);
+  if (performance.now() < alertVoiceUntil) return;
+  const fail = () => { player.onerror = null; say(text); };
+  try {
+    player.onended = null; player.onerror = fail; player.muted = false; player.src = clips[0];
+    const p = player.play(); if (p) p.catch(fail);
+  } catch (e) { fail(); }
+}
 let alertVoiceUntil = 0;
 function sayKind(k) {
   // l'avviso zittisce l'indicazione in corso e per qualche secondo nessuna indicazione gli parla sopra
@@ -707,9 +719,11 @@ function startNav(sim) {
     puck = new maplibregl.Marker({ element: el.firstChild, rotationAlignment: 'viewport' });
   }
   puck.setLngLat(r.coords[0]).addTo(map);
-  unlockAudio();
   for (const z of topZones(r)) for (const u of clipFor(SOLO ? 'occhio' : z.kind) || []) fetch(u).catch(() => {});   // le clip sono già scaricate quando servono
-  say(r.hot.length ? 'Partiamo. Ti avviso prima dei tratti critici.' : 'Partiamo. Nessun tratto critico sul percorso.');
+  for (const u of clipFor('arrivato') || []) fetch(u).catch(() => {});
+  // "Partiamo" parte dal tocco su Avvia o Simula: è anche ciò che sblocca l'audio per gli avvisi successivi
+  if (clipFor('partiamo')) sayClip('partiamo', 'Partiamo.');
+  else { unlockAudio(); say(r.hot.length ? 'Partiamo. Ti avviso prima dei tratti critici.' : 'Partiamo. Nessun tratto critico sul percorso.'); }
   if (navigator.wakeLock) navigator.wakeLock.request('screen').then(w => wakeLock = w).catch(() => {});
   updateNav(true);
   if (sim) requestAnimationFrame(tick);
@@ -928,7 +942,7 @@ function finishNav() {
   n.key = 'done';
   keepAwake(false);
   setAlerting(false);
-  say(`Sei arrivato.${cmp}`);
+  sayClip('arrivato', `Sei arrivato.${cmp}`);
   const eta = $('#eta'); if (eta) eta.innerHTML = '<b>Arrivato</b><span>Tocca Esci per tornare al percorso</span>';
 }
 

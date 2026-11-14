@@ -23,6 +23,9 @@ PHRASES = {
     'auto': 'Occhio alle macchine.',
     'ped': 'Occhio ai pedoni.',
     'buche': 'Occhio alle buche.',
+    # messaggi di servizio: registrati anche loro, così non li legge la voce sintetica del telefono
+    'partiamo': 'Partiamo.',
+    'arrivato': 'Sei arrivato.',
 }
 ROMAN = {'Ii': 'Secondo', 'Iii': 'Terzo', 'Iv': 'Quattro', 'Vi': 'Sesto', 'Xii': 'Dodicesimo', 'Xx': 'Venti',
          'Xxi': 'Ventuno', 'Xxiii': 'Ventitreesimo', 'Xxiv': 'Ventiquattro', 'Xxv': 'Venticinque'}
