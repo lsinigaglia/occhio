@@ -506,7 +506,7 @@ function rcard(k, r, label) {
   return `<button class="rcard ${k} ${S.sel === k ? 'sel' : ''}" type="button" data-sel="${k}">
     <span class="rlabel"><i></i>${label}</span><span class="rtime">${fmtMin(r.time)}</span>
     <span class="rsub">${fmtKm(r.dist)}${r.via[0] ? ' · ' + esc(r.via[0]) : ''}</span>
-    <span class="rstat"><b>${r.inc}</b> incidenti sul tragitto</span></button>`;
+    <span class="rstat"><b>${r.inc}</b> incidenti per strada</span></button>`;
 }
 function previewHtml() {
   const { fast, safe } = S.routes, r = S.routes[S.sel];
@@ -514,11 +514,11 @@ function previewHtml() {
   if (safe) {
     const dm = Math.max(1, Math.round((safe.time - fast.time) / 60)), dh = zones(fast).length - zones(safe).length;
     const gains = [];
-    if (safe.inc < fast.inc) gains.push(`−${pct(fast.inc - safe.inc, fast.inc)}% incidenti registrati`);
-    h += `<p class="gain">Più prudente: +${dm} min, <b>${gains.join(', ') || 'meno incidenti gravi'}</b> sul tragitto.</p>`;
+    if (safe.inc < fast.inc) gains.push(`${pct(fast.inc - safe.inc, fast.inc)}% di incidenti in meno`);
+    h += `<p class="gain">Più prudente: ${dm} min in più, <b>${gains.join(', ') || 'meno incidenti gravi'}</b>.</p>`;
     h += `<div class="rcards">${rcard('safe', safe, 'Più prudente')}${rcard('fast', fast, 'Più veloce')}</div>`;
   } else {
-    h += `<p class="gain">Su questo tragitto il percorso più veloce è già quello con meno punti critici.</p><div class="rcards one">${rcard('fast', fast, 'Percorso consigliato')}</div>`;
+    h += `<p class="gain">Qui la strada più veloce è anche la più tranquilla.</p><div class="rcards one">${rcard('fast', fast, 'Percorso consigliato')}</div>`;
   }
   h += `<div class="actions"><button class="btn primary" type="button" data-act="start">${ICON.nav}Avvia</button>
     <button class="btn tonal" type="button" data-act="sim">${ICON.play}Simula</button>
@@ -530,28 +530,29 @@ function previewHtml() {
     h += `<h3>${top.length === 1 ? 'Il tratto a cui stare attento' : `I ${top.length} tratti a cui stare attento`}</h3>`;
     for (const z of top) {
       h += `<button class="keep" type="button" data-hot="${z.main.id}"><span class="badge ${zclass(z)}">${z.n}</span>
-        <span class="hmain"><b>${esc(z.name)}</b><span class="say">${esc(zsub(z))}</span></span><span class="hdist">${fmtDist(z.at)}</span></button>`;
+        <span class="hmain"><b>${esc(z.name)}</b><span class="say">Occhio a ${esc(zoneStats(z).watch[0])}</span></span><span class="hdist">${fmtDist(z.at)}</span></button>`;
     }
-    h += `<p class="note" style="margin:8px 0 0">Durante il viaggio ti avviso solo prima di questi${all.length - top.length === 1 ? `. L'altro tratto, minore, resta segnato sulla mappa` : all.length > top.length ? `. Gli altri ${all.length - top.length} tratti minori restano segnati sulla mappa` : ''}.</p>`;
+    h += `<p class="note" style="margin:8px 0 0">Ti avviso solo prima di questi.</p>`;
   }
-  h += `<p class="note">Incidenti rilevati dalla Polizia Locale, ${period()} (open data Roma Capitale). Il confronto non tiene conto del traffico.</p>`;
+  h += `<p class="note">Dati della Polizia Locale, ${period()}.</p>`;
   return h;
 }
-// A cosa stare attento, per ogni dinamica di incidente: una frase che dice cosa guardare.
+// A cosa stare attento, detto come lo si direbbe a voce. Ogni frase completa "Occhio a…".
 const WATCH = {
-  'Scontri in svolta o immissione': 'Auto che svoltano o si immettono senza darti la precedenza',
-  'Scontri laterali': 'Auto che ti stringono o cambiano corsia senza guardare',
-  'Scontri frontali': 'Auto che invadono la tua corsia',
-  'Tamponamenti': 'Frenate improvvise: tieni la distanza',
-  'Investimenti di pedoni': 'Pedoni che attraversano, anche fuori dalle strisce',
-  'Urti contro veicoli fermi o in sosta': 'Portiere che si aprono e auto che ripartono dalla sosta',
-  'Urti contro ostacoli': 'Ostacoli e fondo rovinato',
-  'Urti contro buche': 'Buche nel fondo stradale',
-  'Cadute e frenate improvvise': 'Fondo scivoloso e frenate improvvise',
-  'Uscite di strada': 'Curve e fondo insidioso: riduci la velocità',
+  'Scontri in svolta o immissione': 'chi ti taglia la strada agli incroci',
+  'Scontri laterali': 'chi ti stringe di lato',
+  'Scontri frontali': 'chi invade la tua corsia',
+  'Tamponamenti': 'chi frena di colpo',
+  'Investimenti di pedoni': 'chi attraversa a piedi',
+  'Urti contro veicoli fermi o in sosta': 'portiere e auto che ripartono',
+  'Urti contro ostacoli': 'buche e ostacoli',
+  'Urti contro buche': 'le buche',
+  'Cadute e frenate improvvise': 'il fondo: qui si scivola',
+  'Uscite di strada': 'la curva: vai piano',
 };
-// Mette insieme i punti di un tratto: numeri, dinamiche, condizioni.
+// Mette insieme i punti di un tratto: numeri, tipi di incidente, condizioni.
 function zoneStats(z) {
+  if (z.stats) return z.stats;
   const t = { n: 0, tw: 0, feriti: 0, gravi: 0, morti: 0, notte: 0, punta: 0, bagnato: 0, nat: new Map(), nota: null };
   for (const h of z.hs) {
     for (const k of ['n', 'tw', 'feriti', 'gravi', 'morti', 'notte', 'punta', 'bagnato']) t[k] += h[k] || 0;
@@ -559,31 +560,29 @@ function zoneStats(z) {
     if (h.nota) t.nota = h.nota;
   }
   t.nat = [...t.nat.entries()].sort((a, b) => b[1] - a[1]);
-  return t;
+  const tot = t.nat.reduce((a, b) => a + b[1], 0) || 1;
+  // le prime una o due cose a cui stare attento (la seconda solo se pesa almeno un quarto)
+  t.watch = t.nat.filter((x, i) => WATCH[x[0]] && (i === 0 || x[1] / tot >= 0.25)).slice(0, 2).map(x => WATCH[x[0]]);
+  if (!t.watch.length) t.watch = ['questo tratto: vai piano'];
+  t.when = [];
+  if (pct(t.punta, t.n) >= 50) t.when.push("all'ora di punta");
+  if (pct(t.notte, t.n) >= 35) t.when.push('di sera');
+  if (pct(t.bagnato, t.n) >= 25) t.when.push('quando piove');
+  return (z.stats = t);
 }
 function hotHtml(z) {
-  const t = zoneStats(z), tot = t.nat.reduce((a, b) => a + b[1], 0) || 1;
-  // le prime una o due cose a cui stare attento (la seconda solo se pesa almeno un quarto)
-  const watch = t.nat.filter((x, i) => WATCH[x[0]] && (i === 0 || x[1] / tot >= 0.25)).slice(0, 2).map(x => WATCH[x[0]]);
-  const when = [];
-  if (pct(t.punta, t.n) >= 50) when.push('nelle ore di punta');
-  if (pct(t.notte, t.n) >= 35) when.push('di sera e di notte');
-  if (pct(t.bagnato, t.n) >= 25) when.push('con il bagnato');
-  const len = z.end - z.at;
-  const sub = z.hs.length > 1 ? `Tratto critico · ${z.hs.length} punti vicini in ${fmtDist(Math.max(100, len))}` : 'Punto critico';
-  const chips = [];
-  if (t.morti) chips.push(`<span class="chip red">${t.morti} ${t.morti === 1 ? 'vittima' : 'vittime'}</span>`);
-  if (t.gravi) chips.push(`<span class="chip red">${t.gravi} con feriti gravi</span>`);
-  return `<div class="dhead"><button class="iconbtn" type="button" data-act="hotback">${ICON.back}</button><div><h2>${esc(z.name)}</h2><p class="sub">${sub}</p></div></div>
-    <div class="watch"><span class="sym">${ALERT_ICON[z.kind]}</span><div><b>A cosa stare attento</b>
-      ${(watch.length ? watch : ['Rallenta e tieni alta l\'attenzione']).map(w => `<p>${esc(w)}</p>`).join('')}
-      ${when.length ? `<small>Soprattutto ${esc(when.join(' e '))}.</small>` : ''}</div></div>
+  const t = zoneStats(z), len = z.end - z.at;
+  const facts = [`<b>${t.n} incidenti</b> in ${S.meta.mesi} mesi`];
+  if (t.tw) facts.push(`${t.tw} in moto o bici`);
+  if (t.feriti) facts.push(`${t.feriti} con feriti`);
+  if (t.morti) facts.push(`${t.morti} ${t.morti === 1 ? 'morto' : 'morti'}`);
+  return `<div class="dhead"><button class="iconbtn" type="button" data-act="hotback">${ICON.back}</button><div><h2>${esc(z.name)}</h2>${z.hs.length > 1 ? `<p class="sub">Un tratto di ${fmtDist(Math.max(100, len))}</p>` : ''}</div></div>
+    <div class="watch"><span class="sym">${ALERT_ICON[z.kind]}</span><div><b>Occhio a</b>
+      ${t.watch.map(w => `<p>${esc(w)}</p>`).join('')}
+      ${t.when.length ? `<small>Peggio ${esc(t.when.join(' e '))}.</small>` : ''}</div></div>
     ${t.nota ? `<div class="update"><b>Aggiornamento</b>${esc(t.nota.testo)}<a href="${esc(t.nota.url)}" target="_blank" rel="noopener">${esc(t.nota.fonte)}</a></div>` : ''}
-    <h3>Cosa è successo qui in ${S.meta.mesi} mesi</h3>
-    <div class="tiles" style="margin-top:0"><div class="tile"><b>${t.n}</b><span>incidenti</span></div><div class="tile"><b>${t.tw}</b><span>con due ruote</span></div><div class="tile"><b>${t.feriti}</b><span>con feriti</span></div></div>
-    ${chips.length ? `<div class="chips">${chips.join('')}</div>` : ''}
-    <div style="margin-top:14px">${t.nat.slice(0, 4).map(([l, k]) => `<div class="bar"><div><span>${esc(l)}</span><span>${k}</span></div><i style="width:${Math.max(4, 100 * k / t.nat[0][1])}%"></i></div>`).join('')}</div>
-    <p class="note">Fonte: open data Roma Capitale, incidenti rilevati dalla Polizia Locale, ${period()}. La strada può essere stata modificata dopo.</p>`;
+    <p class="facts">${facts.join(' · ')}</p>
+    <p class="note">Dati della Polizia Locale, ${period()}. La strada può essere cambiata nel frattempo.</p>`;
 }
 // Apre la scheda: se il punto fa parte di un tratto del percorso scelto si apre il tratto intero.
 function openHot(id) {
@@ -678,7 +677,7 @@ function bgHtml() {
     <div class="actions" style="margin-bottom:4px"><button class="btn primary" type="button" data-act="gnav">${ICON.nav}Apri Google Maps</button>
     <button class="btn danger" type="button" data-act="bgstop">Termina</button></div>
     ${full ? '' : `<div class="advice">${ICON.bulb}<div>Per l'avviso grande a tutto schermo, consenti a Occhio di comparire sopra le altre app. <button class="link" style="padding:6px 0 0;display:block" type="button" data-act="overlay">Attiva</button></div></div>`}
-    ${top.map(z => `<div class="keep"><span class="badge ${zclass(z)}">${z.n}</span><span class="hmain"><b>${esc(z.name)}</b><span class="say">${esc(zsub(z))}</span></span></div>`).join('')}`;
+    ${top.map(z => `<div class="keep"><span class="badge ${zclass(z)}">${z.n}</span><span class="hmain"><b>${esc(z.name)}</b><span class="say">Occhio a ${esc(zoneStats(z).watch[0])}</span></span></div>`).join('')}`;
 }
 
 /* ------------------------------------------------------------------ viaggio */
