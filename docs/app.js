@@ -31,7 +31,7 @@ const ICON = {
 /* ------------------------------------------------------------------ stato */
 const S = {
   mode: 'home', from: null, to: null, field: 'to', routes: null, sel: 'safe',
-  hot: [], meta: null, pos: null, nav: null, mute: false, ready: false,
+  hot: [], meta: null, pos: null, nav: null, mute: true, ready: false,
 };
 
 /* ------------------------------------------------------------------ worker */
