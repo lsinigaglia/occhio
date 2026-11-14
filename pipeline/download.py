@@ -22,7 +22,7 @@ TILES = ['41.78,12.35,41.895,12.495', '41.78,12.495,41.895,12.64',
          '41.895,12.35,42.01,12.495', '41.895,12.495,42.01,12.64']
 
 CKAN = 'https://dati.comune.roma.it/catalog/api/3/action/package_search?q=incidenti+stradali&rows=50'
-YEARS = ('2021', '2022')
+YEARS = ('2018', '2019', '2020', '2021', '2022')
 
 
 def fetch(url, data=None, timeout=240):
