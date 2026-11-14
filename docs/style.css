@@ -253,3 +253,6 @@ button.chip { border: 0; font: inherit; font-size: 14px; padding: 8px 14px; bord
 #navcard .occbig.chat .where { color: #5f6368; font-weight: 500; font-size: 16px; }
 #navcard .occ.chat { background: #fff; color: #1f1f1f; border: 3px solid #ff9800; }
 #navcard .occ.chat b { text-transform: none; font-size: 17px; }
+
+/* solo "Occhio": una parola, più grande che si può */
+#navcard .occbig .lab.solo { font-size: 62px; }

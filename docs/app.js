@@ -167,6 +167,9 @@ const QS = new URLSearchParams(location.search);   // ?stile=street&voce=liam pe
 let STYLE = QS.get('stile') || pref('occhioStile', 'classico'), VOICE = QS.get('voce') || pref('occhioVoce', 'alice');
 const VOICES = { alice: ['Alice', 'audio/p'], jessica: ['Jessica', 'audio/v/jessica'], liam: ['Liam', 'audio/v/liam'] };
 const STYLES = { classico: 'Classico', sticker: 'Sticker', street: 'Street', chat: 'Chat' };
+// testo dell'avviso: la frase intera ("Occhio ai pedoni") oppure la sola parola "Occhio"
+let SOLO = (QS.get('testo') || pref('occhioTesto', 'frase')) === 'solo';
+const TEXTS = { frase: 'Frase intera', solo: 'Solo "Occhio"' };
 const clipFor = k => CLIPS && CLIPS.has(k) ? [`${(VOICES[VOICE] || VOICES.alice)[1]}/${k}.mp3${VQ}`] : null;
 const alertClips = h => clipFor(phraseKey(h));
 const player = new Audio();
@@ -182,7 +185,7 @@ function unlockAudio() {
 const sayAlert = h => sayKind(phraseKey(h));
 function sayKind(k) {
   if (S.mute) return;
-  const text = ALERT_LABEL[k].join(' ') + '.', clips = clipFor(k);
+  const text = SOLO ? 'Occhio!' : ALERT_LABEL[k].join(' ') + '.', clips = clipFor(SOLO ? 'occhio' : k);
   if (!clips) return say(text);
   let i = 0;
   const fail = () => { player.onended = null; player.onerror = null; say(text); };
@@ -527,9 +530,9 @@ $('#sheetc').onclick = e => {
   if (a === 'reload') location.reload();
   else if (a === 'prova') { setMode('prova'); $('#sheet').classList.add('full'); }
   else if (a === 'demo') demoAlert(t.dataset.k);
-  else if (a === 'stile' || a === 'voce') {
-    if (a === 'stile') STYLE = t.dataset.k; else VOICE = t.dataset.k;
-    try { localStorage.setItem(a === 'stile' ? 'occhioStile' : 'occhioVoce', t.dataset.k); } catch (e) { /* vale solo per questa visita */ }
+  else if (a === 'stile' || a === 'voce' || a === 'testo') {
+    if (a === 'stile') STYLE = t.dataset.k; else if (a === 'voce') VOICE = t.dataset.k; else SOLO = t.dataset.k === 'solo';
+    try { localStorage.setItem({ stile: 'occhioStile', voce: 'occhioVoce', testo: 'occhioTesto' }[a], t.dataset.k); } catch (e) { /* vale solo per questa visita */ }
     const top = $('#sheetc').scrollTop; render(); $('#sheetc').scrollTop = top;
     demoAlert('ped');
   }
@@ -578,8 +581,8 @@ function startBackground() {
   const r = S.routes[S.sel];
   const alerts = top3(r).map(t => ({
     lat: t.h.lat, lon: t.h.lon, name: t.h.s1 || hname(t.h), phrase: phrase(t.h),
-    label: alertLabel(t.h), kind: phraseKey(t.h),
-    clips: (alertClips(t.h) || []).map(u => new URL(u, location.href).href),
+    label: SOLO ? 'Occhio' : alertLabel(t.h), kind: phraseKey(t.h),
+    clips: (clipFor(SOLO ? 'occhio' : phraseKey(t.h)) || []).map(u => new URL(u, location.href).href),
   }));
   if (!alerts.length) { toast('Nessun punto critico su questo percorso'); return openGmaps(true); }
   if (!NATIVE.startTrip(JSON.stringify({ alerts }))) return toast('Consenti la posizione precisa a Occhio, poi tocca di nuovo Avvia');
@@ -770,6 +773,12 @@ function updateNav(force) {
 // --- la card dell'avviso, nei suoi stili
 const EMOJI = { auto: '🚗', ped: '🚶', buche: '🕳️' };
 function bigCard(k, where) {
+  if (SOLO) {
+    if (STYLE === 'sticker') return `<div class="occbig sticker"><span class="emo">${EMOJI[k]}</span><div><div class="lab">occhio 👀</div><div class="where">${where}</div></div></div>`;
+    if (STYLE === 'street') return `<div class="occbig street"><div class="tape"></div><div class="in"><span class="sym">${ALERT_ICON[k]}</span><div><div class="lab">Occhio!</div><div class="where">${where}</div></div></div></div>`;
+    if (STYLE === 'chat') return `<div class="occbig chat"><span class="ava">👀</span><div class="bub"><div class="lab">Oh, occhio ${EMOJI[k]}</div><div class="where">${where}</div></div></div>`;
+    return `<div class="occbig"><span class="sym">${ALERT_ICON[k]}</span><div><div class="lab solo">Occhio</div><div class="where">${where}</div></div></div>`;
+  }
   const lab = ALERT_LABEL[k], art = lab[0].split(' ').slice(1).join(' ');
   if (STYLE === 'sticker') return `<div class="occbig sticker"><span class="emo">${EMOJI[k]}</span><div><div class="pre">occhio 👀 ${esc(art)}</div><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">${where}</div></div></div>`;
   if (STYLE === 'street') return `<div class="occbig street"><div class="tape"></div><div class="in"><span class="sym">${ALERT_ICON[k]}</span><div><span class="tag">Occhio!</span><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">${where}</div></div></div></div>`;
@@ -777,11 +786,11 @@ function bigCard(k, where) {
   return `<div class="occbig"><span class="sym">${ALERT_ICON[k]}</span><div><div class="pre">${esc(lab[0])}</div><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">${where}</div></div></div>`;
 }
 function stripCard(k, dist, name) {
-  const lab = ALERT_LABEL[k];
+  const lab = SOLO ? ['Occhio', ''] : ALERT_LABEL[k];
   if (STYLE === 'sticker') return `<div class="occ sticker"><span class="emo">${EMOJI[k]}</span><div><b>occhio ${esc(lab[0].split(' ').slice(1).join(' '))} ${esc(lab[1])} · ${dist}</b>${name}</div></div>`;
-  if (STYLE === 'street') return `<div class="occ street"><span class="sym">${ALERT_ICON[k]}</span><div><b>${esc(lab[1])} · ${dist}</b>${name}</div></div>`;
+  if (STYLE === 'street') return `<div class="occ street"><span class="sym">${ALERT_ICON[k]}</span><div><b>${esc(lab[1] || 'Occhio!')} · ${dist}</b>${name}</div></div>`;
   if (STYLE === 'chat') return `<div class="occ chat"><span class="emo">👀</span><div><b>${esc(lab.join(' ').toLowerCase())} · ${dist}</b>${name}</div></div>`;
-  return `<div class="occ"><span class="sym">${ALERT_ICON[k]}</span><div><b>${esc(lab.join(' '))} · ${dist}</b>${name}</div></div>`;
+  return `<div class="occ"><span class="sym">${ALERT_ICON[k]}</span><div><b>${esc(lab.join(' ').trim())} · ${dist}</b>${name}</div></div>`;
 }
 
 // --- avviso per chi guida: poche parole grandi, un simbolo, tutto lo schermo che si accende
@@ -852,6 +861,7 @@ function provaHtml() {
   return `<div class="dhead"><button class="iconbtn" type="button" data-act="home">${ICON.back}</button><div><h2>Prova gli avvisi</h2>
     <p class="sub">Tocca un avviso per vederlo e sentirlo com'è durante il viaggio.</p></div></div>
     <h3>Stile della card</h3>${chips('stile', STYLES, STYLE, x => x)}
+    <h3>Testo</h3>${chips('testo', TEXTS, SOLO ? 'solo' : 'frase', x => x)}
     <h3>Voce</h3>${chips('voce', VOICES, VOICE, x => x[0])}
     <h3>Avvisi</h3>
     ${Object.keys(ALERT_LABEL).map(k => `<button class="demo" type="button" data-act="demo" data-k="${k}"><span class="sym">${ALERT_ICON[k]}</span>
