@@ -85,12 +85,12 @@ const appReady = Promise.all([mapReady, dataReady]).then(([, d]) => {
   map.addSource('r-zones', { type: 'geojson', data: empty });
   map.addLayer({ id: 'r-zones-case', type: 'line', source: 'r-zones', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#111', 'line-width': 13 } });
   map.addLayer({ id: 'r-zones-line', type: 'line', source: 'r-zones', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['case', ['get', 'top'], '#ff9800', '#ffd08a'], 'line-width': 9 } });
-  const color = ['step', ['get', 'n'], '#f9ab00', 10, '#e8710a', 20, '#d93025'];
+  const color = ['step', ['get', 'n'], '#f9ab00', 30, '#e8710a', 50, '#d93025'];
   map.addSource('hot', { type: 'geojson', data: { type: 'FeatureCollection', features: S.hot.map(h => ({ type: 'Feature', properties: { id: h.id, n: h.n }, geometry: { type: 'Point', coordinates: [h.lon, h.lat] } })) } });
   map.addLayer({
     id: 'hot', type: 'circle', source: 'hot', minzoom: 10.5,
     paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, ['min', 6, ['+', 1.5, ['*', 0.1, ['get', 'n']]]], 16, ['min', 26, ['+', 7, ['*', 0.55, ['get', 'n']]]]],
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, ['min', 6, ['+', 1.5, ['*', 0.033, ['get', 'n']]]], 16, ['min', 26, ['+', 7, ['*', 0.18, ['get', 'n']]]]],
       'circle-color': color, 'circle-opacity': 0.6, 'circle-stroke-color': '#fff', 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0.5, 15, 1.5],
     },
   });
@@ -117,10 +117,11 @@ const fmtMin = s => Math.max(1, Math.round(s / 60)) + ' min';
 const fmtKm = m => (m / 1000).toFixed(1).replace('.', ',') + ' km';
 const fmtDist = m => m >= 1000 ? fmtKm(m) : Math.max(50, Math.round(m / 50) * 50) + ' m';
 const hname = h => h.s2 ? `${h.s1} / ${h.s2}` : h.s1 || 'Punto critico';
-const hclass = h => h.n >= 20 ? 'r' : h.n >= 10 ? 'o' : 'a';
+const hclass = h => h.n >= 50 ? 'r' : h.n >= 30 ? 'o' : 'a';
 const pct = (a, b) => Math.round(100 * a / Math.max(1, b));
 const MONTHS = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 const fmtYm = ym => `${MONTHS[+ym.slice(5) - 1]} ${ym.slice(0, 4)}`;
+const span = () => { const m = S.meta.mesi, y = Math.floor(m / 12), r = m % 12; return m < 24 ? `${m} mesi` : r >= 8 ? `quasi ${y + 1} anni` : r <= 2 ? `${y} anni` : `oltre ${y} anni`; };
 const period = () => `${fmtYm(S.meta.dal)} – ${fmtYm(S.meta.al)}`;
 
 function natLabel(n) {
@@ -237,7 +238,7 @@ function zones(r) {
 }
 // i tratti da ricordare: i più pesanti, al massimo 3 (4 sui tragitti lunghi), nell'ordine in cui si incontrano
 const topZones = r => [...zones(r)].sort((a, b) => b.w - a.w).slice(0, r.dist < 4000 ? 3 : 4).sort((a, b) => a.at - b.at);
-const zclass = z => z.n >= 40 ? 'r' : z.n >= 20 ? 'o' : 'a';
+const zclass = z => z.n >= 120 ? 'r' : z.n >= 60 ? 'o' : 'a';
 const zsub = z => (z.hs.length > 1 ? `${z.hs.length} punti vicini · ` : '') + `${z.n} incidenti`;
 function routeCum(r) {
   if (!r.cum) { r.cum = [0]; for (let i = 1; i < r.coords.length; i++) r.cum.push(r.cum[i - 1] + distM(r.coords[i - 1], r.coords[i])); }
@@ -502,7 +503,7 @@ function homeHtml() {
     <p>Incidenti rilevati dalla Polizia Locale, ${period()}</p></div>
     <button class="link" type="button" data-act="about">Come funziona</button></div>
     <button class="link" style="padding:8px 0 0" type="button" data-act="prova">Prova gli avvisi</button>
-    <div class="legend"><span><i style="background:#f9ab00"></i>8–9 incidenti</span><span><i style="background:#e8710a"></i>10–19</span><span><i style="background:#d93025"></i>20 o più</span></div></div>`;
+    <div class="legend"><span><i style="background:#f9ab00"></i>22–29 incidenti</span><span><i style="background:#e8710a"></i>30–49</span><span><i style="background:#d93025"></i>50 o più</span></div></div>`;
 }
 function aboutHtml() {
   return `<div class="dhead"><button class="iconbtn" type="button" data-act="home">${ICON.back}</button><div><h2>Come funziona</h2></div></div>
@@ -510,7 +511,7 @@ function aboutHtml() {
     <h3>Da dove vengono i dati</h3>
     <p class="sub">${S.meta.incidenti.toLocaleString('it-IT')} incidenti con posizione affidabile rilevati dalla Polizia Locale di Roma Capitale tra ${period()} (open data del Comune), agganciati alla rete stradale di OpenStreetMap.</p>
     <h3>Cos'è un punto critico</h3>
-    <p class="sub">Un tratto di circa 90 metri con almeno 8 incidenti nel periodo. Gli incidenti con feriti e quelli che coinvolgono moto, bici e monopattini pesano di più nella scelta del percorso.</p>
+    <p class="sub">Un tratto di circa 90 metri con almeno ${S.meta.soglia || 22} incidenti in ${span()}. Gli incidenti con feriti e quelli che coinvolgono moto, bici e monopattini pesano di più nella scelta del percorso.</p>
     <h3>Cosa non fa</h3>
     <p class="sub">Non garantisce un viaggio sicuro. Non conosce il traffico: dove passano più veicoli avvengono più incidenti. I dati pubblici si fermano al 2022, quindi un incrocio può essere stato sistemato nel frattempo.</p>`;
 }
@@ -583,7 +584,7 @@ function zoneStats(z) {
 }
 function hotHtml(z) {
   const t = zoneStats(z), len = z.end - z.at;
-  const facts = [`<b>${t.n} incidenti</b> in ${S.meta.mesi} mesi`];
+  const facts = [`<b>${t.n} incidenti</b> in ${span()}`];
   if (t.tw) facts.push(`${t.tw} in moto o bici`);
   if (t.morti) facts.push(`${t.morti} ${t.morti === 1 ? 'morto' : 'morti'}`);
   return `<div class="dhead"><button class="iconbtn" type="button" data-act="hotback">${ICON.back}</button><div><h2>${esc(z.name)}</h2>${z.hs.length > 1 ? `<p class="sub">Un tratto di ${fmtDist(Math.max(100, len))}</p>` : ''}</div></div>

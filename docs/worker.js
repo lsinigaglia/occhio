@@ -16,6 +16,8 @@ const SPEED = [70, 55, 34, 30, 26, 22, 18, 10, 45, 38, 26, 24, 20];
 const FAST_CLASS = new Set([0, 1, 8, 9]);
 const GC = 0.003;
 const HOT_PENALTY = 6;
+// I pesi sono tarati su 16 mesi di incidenti: con un periodo diverso il rischio va riportato a quella scala.
+let K = 1;
 const MX = 111320 * Math.cos(41.9 * Math.PI / 180), MY = 110540;
 
 const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -26,7 +28,7 @@ async function init() {
     fetch('data/graph.json' + self.location.search).then(r => r.json()),
     fetch('data/hotspots.json' + self.location.search).then(r => r.json()),
   ]);
-  G = g; HOT = h.items;
+  G = g; HOT = h.items; K = 16 / ((g.meta && g.meta.mesi) || 16);
   N = G.lat.length; E = G.a.length;
   latD = new Float64Array(N); lonD = new Float64Array(N);
   for (let i = 0; i < N; i++) { latD[i] = G.lat[i] / 1e5; lonD[i] = G.lon[i] / 1e5; }
@@ -47,7 +49,7 @@ async function init() {
     const e = pos[u]++;
     eFrom[e] = u; eTo[e] = v; eSeg[e] = i; eFwd[e] = fwd;
     eTime[e] = G.len[i] / (SPEED[G.cls[i]] / 3.6) + (deg[v] >= 3 ? 5 : 0);
-    eRisk[e] = (G.risk[i] + G.nrisk[v]) / 10;
+    eRisk[e] = K * (G.risk[i] + G.nrisk[v]) / 10;
     eInc[e] = G.cnt[i] + G.ncnt[v];
   };
   for (let i = 0; i < E; i++) {
@@ -326,7 +328,7 @@ function route(from, to) {
   const fast = describe(fe);
   // Il percorso prudente è quello con meno incidenti registrati e meno punti critici,
   // purché non costi più del 30% di tempo (+1 min) né più del 40% di strada.
-  const score = r => r.inc + 6 * r.hot.length;
+  const score = r => r.inc * K + 6 * r.hot.length;
   let safe = null;
   for (const beta of [0.3, 0.6, 1, 2, 4, 8, 16]) {
     const e = findPath(a.node, b.node, beta); if (!e) continue;

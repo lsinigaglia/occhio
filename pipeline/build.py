@@ -15,8 +15,8 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW_OSM = os.path.join(ROOT, 'data', 'raw', 'osm')
-RAW_INC = os.path.join(ROOT, 'data', 'raw', 'incidenti')
-OUT = os.path.join(ROOT, 'docs', 'data')
+RAW_INC = os.environ.get('INC_DIR') or os.path.join(ROOT, 'data', 'raw', 'incidenti')
+OUT = os.environ.get('OUT_DIR') or os.path.join(ROOT, 'docs', 'data')
 
 # classi stradali percorribili a motore (l'ordine definisce l'indice salvato nel grafo)
 CLASSES = ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential',
@@ -214,6 +214,8 @@ def load_incidents():
         rd = csv.reader(txt.splitlines(), delimiter=';')
         hdr = [h.strip().lower() for h in next(rd)]
         ix = {h: i for i, h in enumerate(hdr)}
+        if 'latitudine' in ix:      # i file fino a metà 2019 usano i nomi in italiano
+            ix['latitude'], ix['longitude'] = ix['latitudine'], ix['longitudine']
 
         def g(r, k):
             i = ix.get(k)
@@ -269,12 +271,22 @@ def load_incidents():
         by[(it['lat'], it['lon'])].append(it)
     good, dropped = [], 0
     for v in by.values():
-        cross = {i['s2'] for i in v if i['s2']}
+        cross = collections.Counter(i['s2'] for i in v if i['s2'])
         vague = sum(1 for i in v if i['loc2'].lower().startswith('da specificare'))
-        if len(cross) >= 4 or vague >= 4 or (len(v) >= 8 and len(cross) >= 3):
-            dropped += len(v)
-        else:
+        if not (len(cross) >= 4 or vague >= 4 or (len(v) >= 8 and len(cross) >= 3)):
             good.extend(v)
+            continue
+        s1 = collections.Counter(i['s1'] for i in v).most_common(1)[0][0].upper()
+        if s1.startswith(('PIAZZA', 'PIAZZALE', 'LARGO')):
+            good.extend(v)          # una piazza è un posto solo: il suo centro va bene
+            continue
+        top, n_top = cross.most_common(1)[0] if cross else ('', 0)
+        if n_top * 2 >= len(v):     # un incrocio vero con qualche incidente segnato male: tengo l'incrocio
+            keep = [i for i in v if i['s2'] == top]
+            good.extend(keep)
+            dropped += len(v) - len(keep)
+        else:
+            dropped += len(v)
     print('scartati per coordinata di ripiego', dropped)
     return good, len(inc)
 
@@ -387,7 +399,7 @@ def main():
     score = {c: sum(incidents[k]['w'] for k in window(c)) for c in cells}
     claimed = [False] * len(incidents)
     hotspots = []
-    MIN_N = int(os.environ.get('HOT_MIN', '8'))
+    MIN_N = int(os.environ.get('HOT_MIN', '22'))
     for c in sorted(score, key=score.get, reverse=True):
         ks = [k for k in window(c) if not claimed[k]]
         if len(ks) < MIN_N:
@@ -445,7 +457,7 @@ def main():
             geom.append(round(la * 1e5)); geom.append(round(lo * 1e5))
         goff.append(len(geom))
     graph = {
-        'meta': {'incidenti': len(incidents), 'dal': months[0], 'al': months[-1], 'mesi': len(months),
+        'meta': {'incidenti': len(incidents), 'dal': months[0], 'al': months[-1], 'mesi': len(months), 'soglia': int(os.environ.get('HOT_MIN', '22')),
                  'fonte': 'Open Data Roma Capitale (incidenti), OpenStreetMap (strade)'},
         'classes': CLASSES,
         'lat': [round(v * 1e5) for v in nlat], 'lon': [round(v * 1e5) for v in nlon],
