@@ -476,7 +476,7 @@ function render() {
   if (S.mode === 'home') c.innerHTML = homeHtml();
   else if (S.mode === 'loading') c.innerHTML = '<div class="loading"><div class="spin"></div>Calcolo i percorsi…</div>';
   else if (S.mode === 'preview') c.innerHTML = previewHtml();
-  else if (S.mode === 'hot') c.innerHTML = hotHtml(S.hot[S.hotId]);
+  else if (S.mode === 'hot') c.innerHTML = hotHtml(S.hotZone);
   else if (S.mode === 'about') c.innerHTML = aboutHtml();
   else if (S.mode === 'prova') c.innerHTML = provaHtml();
   else if (S.mode === 'nav') c.innerHTML = navBarHtml();
@@ -537,33 +537,69 @@ function previewHtml() {
   h += `<p class="note">Incidenti rilevati dalla Polizia Locale, ${period()} (open data Roma Capitale). Il confronto non tiene conto del traffico.</p>`;
   return h;
 }
-function hotHtml(h) {
-  const g = grouped(h), tot = g.reduce((a, b) => a + b[1], 0) || 1;
-  const chips = [];
-  if (h.part) chips.push(`<span class="chip">${esc(h.part)}</span>`);
-  if (h.morti) chips.push(`<span class="chip red">${h.morti} ${h.morti === 1 ? 'vittima' : 'vittime'}</span>`);
-  if (h.gravi) chips.push(`<span class="chip red">${h.gravi} con feriti gravi</span>`);
-  const when = [];
-  if (h.punta) when.push(`<span class="chip">${pct(h.punta, h.n)}% nelle ore di punta</span>`);
-  if (h.notte) when.push(`<span class="chip">${pct(h.notte, h.n)}% di notte</span>`);
-  if (h.bagnato) when.push(`<span class="chip">${pct(h.bagnato, h.n)}% con fondo bagnato</span>`);
-  if (h.ped) when.push(`<span class="chip">${h.ped} con pedoni</span>`);
-  return `<div class="dhead"><button class="iconbtn" type="button" data-act="hotback">${ICON.back}</button><div><h2>${esc(hname(h))}</h2><p class="sub">Punto critico · ${S.meta.mesi} mesi di dati</p></div></div>
-    <div class="chips">${chips.join('')}</div>
-    <div class="tiles"><div class="tile"><b>${h.n}</b><span>incidenti</span></div><div class="tile"><b>${h.tw}</b><span>con due ruote</span></div><div class="tile"><b>${h.feriti}</b><span>con feriti</span></div></div>
-    ${h.nota ? `<div class="update"><b>Aggiornamento</b>${esc(h.nota.testo)}<a href="${esc(h.nota.url)}" target="_blank" rel="noopener">${esc(h.nota.fonte)}</a></div>` : ''}
-    <div class="advice">${ICON.bulb}<div>${esc(advice(h))}</div></div>
-    <h3>Cosa succede qui</h3>
-    ${g.map(([l, k]) => `<div class="bar"><div><span>${esc(l)}</span><span>${k} su ${h.n}</span></div><i style="width:${Math.max(4, 100 * k / tot)}%"></i></div>`).join('')}
-    <h3>Quando</h3><div class="chips" style="margin-top:0">${when.join('') || '<span class="chip">Nessuno schema evidente</span>'}</div>
-    <p class="note">Fonte: open data Roma Capitale, incidenti rilevati dalla Polizia Locale, ${period()}. L'incrocio può essere stato modificato dopo.</p>`;
+// A cosa stare attento, per ogni dinamica di incidente: una frase che dice cosa guardare.
+const WATCH = {
+  'Scontri in svolta o immissione': 'Auto che svoltano o si immettono senza darti la precedenza',
+  'Scontri laterali': 'Auto che ti stringono o cambiano corsia senza guardare',
+  'Scontri frontali': 'Auto che invadono la tua corsia',
+  'Tamponamenti': 'Frenate improvvise: tieni la distanza',
+  'Investimenti di pedoni': 'Pedoni che attraversano, anche fuori dalle strisce',
+  'Urti contro veicoli fermi o in sosta': 'Portiere che si aprono e auto che ripartono dalla sosta',
+  'Urti contro ostacoli': 'Ostacoli e fondo rovinato',
+  'Urti contro buche': 'Buche nel fondo stradale',
+  'Cadute e frenate improvvise': 'Fondo scivoloso e frenate improvvise',
+  'Uscite di strada': 'Curve e fondo insidioso: riduci la velocità',
+};
+// Mette insieme i punti di un tratto: numeri, dinamiche, condizioni.
+function zoneStats(z) {
+  const t = { n: 0, tw: 0, feriti: 0, gravi: 0, morti: 0, notte: 0, punta: 0, bagnato: 0, nat: new Map(), nota: null };
+  for (const h of z.hs) {
+    for (const k of ['n', 'tw', 'feriti', 'gravi', 'morti', 'notte', 'punta', 'bagnato']) t[k] += h[k] || 0;
+    for (const [l, c] of grouped(h)) t.nat.set(l, (t.nat.get(l) || 0) + c);
+    if (h.nota) t.nota = h.nota;
+  }
+  t.nat = [...t.nat.entries()].sort((a, b) => b[1] - a[1]);
+  return t;
 }
+function hotHtml(z) {
+  const t = zoneStats(z), tot = t.nat.reduce((a, b) => a + b[1], 0) || 1;
+  // le prime una o due cose a cui stare attento (la seconda solo se pesa almeno un quarto)
+  const watch = t.nat.filter((x, i) => WATCH[x[0]] && (i === 0 || x[1] / tot >= 0.25)).slice(0, 2).map(x => WATCH[x[0]]);
+  const when = [];
+  if (pct(t.punta, t.n) >= 50) when.push('nelle ore di punta');
+  if (pct(t.notte, t.n) >= 35) when.push('di sera e di notte');
+  if (pct(t.bagnato, t.n) >= 25) when.push('con il bagnato');
+  const len = z.end - z.at;
+  const sub = z.hs.length > 1 ? `Tratto critico · ${z.hs.length} punti vicini in ${fmtDist(Math.max(100, len))}` : 'Punto critico';
+  const chips = [];
+  if (t.morti) chips.push(`<span class="chip red">${t.morti} ${t.morti === 1 ? 'vittima' : 'vittime'}</span>`);
+  if (t.gravi) chips.push(`<span class="chip red">${t.gravi} con feriti gravi</span>`);
+  return `<div class="dhead"><button class="iconbtn" type="button" data-act="hotback">${ICON.back}</button><div><h2>${esc(z.name)}</h2><p class="sub">${sub}</p></div></div>
+    <div class="watch"><span class="sym">${ALERT_ICON[z.kind]}</span><div><b>A cosa stare attento</b>
+      ${(watch.length ? watch : ['Rallenta e tieni alta l\'attenzione']).map(w => `<p>${esc(w)}</p>`).join('')}
+      ${when.length ? `<small>Soprattutto ${esc(when.join(' e '))}.</small>` : ''}</div></div>
+    ${t.nota ? `<div class="update"><b>Aggiornamento</b>${esc(t.nota.testo)}<a href="${esc(t.nota.url)}" target="_blank" rel="noopener">${esc(t.nota.fonte)}</a></div>` : ''}
+    <h3>Cosa è successo qui in ${S.meta.mesi} mesi</h3>
+    <div class="tiles" style="margin-top:0"><div class="tile"><b>${t.n}</b><span>incidenti</span></div><div class="tile"><b>${t.tw}</b><span>con due ruote</span></div><div class="tile"><b>${t.feriti}</b><span>con feriti</span></div></div>
+    ${chips.length ? `<div class="chips">${chips.join('')}</div>` : ''}
+    <div style="margin-top:14px">${t.nat.slice(0, 4).map(([l, k]) => `<div class="bar"><div><span>${esc(l)}</span><span>${k}</span></div><i style="width:${Math.max(4, 100 * k / t.nat[0][1])}%"></i></div>`).join('')}</div>
+    <p class="note">Fonte: open data Roma Capitale, incidenti rilevati dalla Polizia Locale, ${period()}. La strada può essere stata modificata dopo.</p>`;
+}
+// Apre la scheda: se il punto fa parte di un tratto del percorso scelto si apre il tratto intero.
 function openHot(id) {
-  if (S.mode !== 'hot') S.prev = S.mode === 'about' ? 'home' : S.mode;
-  S.hotId = id; setMode('hot');
-  const h = S.hot[id];
+  if (S.mode !== 'hot') S.prev = S.mode === 'about' || S.mode === 'prova' ? 'home' : S.mode;
+  const h = S.hot[id], r = S.routes && S.routes[S.sel];
+  const z = (r && zones(r).find(x => x.hs.includes(h)))
+    || { hs: [h], at: 0, end: 0, n: h.n, w: h.w, main: h, first: h, name: hname(h), kind: phraseKey(h) };
+  S.hotZone = z; setMode('hot');
   map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
-  map.easeTo({ center: [h.lon, h.lat], zoom: Math.max(map.getZoom(), 15.5), offset: [0, -Math.min(innerHeight * 0.2, 170)], duration: 600 });
+  if (z.hs.length > 1) {
+    const b = new maplibregl.LngLatBounds();
+    for (const x of z.hs) b.extend([x.lon, x.lat]);
+    map.fitBounds(b, { padding: { top: $('#top').offsetHeight + 60, bottom: Math.min(innerHeight * 0.55, 460), left: 60, right: 60 }, maxZoom: 16, duration: 600 });
+  } else {
+    map.easeTo({ center: [h.lon, h.lat], zoom: Math.max(map.getZoom(), 15.5), offset: [0, -Math.min(innerHeight * 0.2, 170)], duration: 600 });
+  }
 }
 
 $('#sheetc').onclick = e => {

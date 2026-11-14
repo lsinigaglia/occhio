@@ -256,3 +256,11 @@ button.chip { border: 0; font: inherit; font-size: 14px; padding: 8px 14px; bord
 
 /* solo "Occhio": una parola, più grande che si può */
 #navcard .occbig .lab.solo { font-size: 62px; }
+
+/* scheda del tratto: prima a cosa stare attento */
+.watch { display: flex; gap: 14px; align-items: flex-start; background: #111; color: #fff; border-radius: 18px; padding: 16px; margin-top: 12px; }
+.watch .sym { flex: none; width: 48px; height: 48px; }
+.watch .sym svg { width: 48px; height: 48px; fill: #ff9800; }
+.watch b { display: block; font: 400 15px/1 Anton, Impact, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #ff9800; margin-bottom: 6px; }
+.watch p { margin: 0 0 4px; font-size: 18px; font-weight: 600; line-height: 1.25; }
+.watch small { display: block; margin-top: 6px; font-size: 14px; color: #ffcc80; }
