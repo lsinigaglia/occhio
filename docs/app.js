@@ -149,7 +149,7 @@ function phraseKey(h) {
   if (s.includes('pedone')) return 'ped';
   if (s.includes('laterale')) return 'lat';
   if (s.includes('tamponamento')) return 'tamp';
-  if (s.includes('sosta') || s.includes('fermo')) return 'sosta';
+  if (s.includes('sosta') || s.includes('fermo') || s.includes('arresto')) return 'sosta';
   if (s.includes('ostacolo') || s.includes('fuoriuscita') || s.includes('caduta') || s.includes('buche')) return 'fondo';
   return 'rallenta';
 }
@@ -563,7 +563,7 @@ function startBackground() {
   const r = S.routes[S.sel];
   const alerts = top3(r).map(t => ({
     lat: t.h.lat, lon: t.h.lon, name: t.h.s1 || hname(t.h), phrase: phrase(t.h),
-    label: ALERT_LABEL[phraseKey(t.h)], kind: phraseKey(t.h),
+    label: ALERT_LABEL[phraseKey(t.h)].join(' '), kind: phraseKey(t.h),
     clips: (alertClips(t.h) || []).map(u => new URL(u, location.href).href),
   }));
   if (!alerts.length) { toast('Nessun punto critico su questo percorso'); return openGmaps(true); }
@@ -741,10 +741,10 @@ function updateNav(force) {
       }
       alerting = top;
       if (top && now < n.bigUntil) {
-        html = `<div class="occbig"><span class="sym">${sym}</span><div><div class="lab">${esc(ALERT_LABEL[k])}</div><div class="where">tra ${fmtDist(d)} · ${esc(h.s1 || hname(h))}</div></div></div>`
+        html = `<div class="occbig"><span class="sym">${sym}</span><div><div class="pre">${esc(ALERT_LABEL[k][0])}</div><div class="lab">${esc(ALERT_LABEL[k][1])}</div><div class="where">tra ${fmtDist(d)} · ${esc(h.s1 || hname(h))}</div></div></div>`
           + (st ? `<div class="manmini"><span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span></div>` : '');
       } else {
-        html += `<div class="occ"><span class="sym">${sym}</span><div><b>${esc(ALERT_LABEL[k])} · tra ${fmtDist(d)}</b>${esc(h.s1 || hname(h))}</div></div>`;
+        html += `<div class="occ"><span class="sym">${sym}</span><div><b>${esc(ALERT_LABEL[k].join(' '))} · ${fmtDist(d)}</b>${esc(h.s1 || hname(h))}</div></div>`;
       }
     }
   }
@@ -753,7 +753,11 @@ function updateNav(force) {
 }
 
 // --- avviso per chi guida: poche parole grandi, un simbolo, tutto lo schermo che si accende
-const ALERT_LABEL = { ped: 'Pedoni', lat: 'Incrocio', tamp: 'Distanza', sosta: 'Doppia fila', fondo: 'Fondo insidioso', rallenta: 'Rallenta' };
+// [riga piccola, parola grande]: si legge "Occhio ai pedoni", con la parola chiave in evidenza
+const ALERT_LABEL = {
+  ped: ['Occhio ai', 'pedoni'], lat: ['Occhio a', 'chi svolta'], tamp: ['Occhio alle', 'frenate'],
+  sosta: ['Occhio alle', 'portiere'], fondo: ['Occhio al', 'fondo'], rallenta: ['Occhio,', 'rallenta'],
+};
 const ALERT_ICON = {
   ped: '<svg viewBox="0 0 24 24"><path d="M13.500 5.500c1.100 0 2-.900 2-2s-.900-2-2-2-2 .900-2 2 .900 2 2 2zM9.800 8.900L7 23h2.100l1.800-8 2.100 2v6h2v-7.500l-2.100-2 .600-3C14.800 12 16.800 13 19 13v-2c-1.900 0-3.500-1-4.300-2.400l-1-1.600c-.400-.600-1-1-1.700-1-.300 0-.500.100-.800.100L6 8.300V13h2V9.600l1.800-.700"/></svg>',
   lat: '<svg viewBox="0 0 24 24"><path d="M14 4l2.290 2.290-2.880 2.880 1.420 1.420 2.880-2.880L20 10V4zm-4 0H4v6l2.290-2.290 4.710 4.700V20h2v-8.410l-5.290-5.300z"/></svg>',

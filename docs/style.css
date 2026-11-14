@@ -202,3 +202,5 @@ body.alerting::after { content: ''; position: fixed; inset: 0; z-index: 8; point
 #navcard .occ .sym { flex: none; width: 34px; height: 34px; }
 #navcard .occ .sym svg { width: 34px; height: 34px; fill: #1a1200; }
 #navcard .occ b { font-size: 17px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; opacity: 1; margin-bottom: 0; }
+#navcard .occbig .pre { font-size: 24px; font-weight: 700; line-height: 1.1; text-transform: uppercase; letter-spacing: .02em; }
+#navcard .occbig .lab { margin-top: 2px; }
