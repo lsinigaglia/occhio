@@ -58,6 +58,10 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 map.once('load', () => { const a = document.querySelector('.maplibregl-ctrl-attrib'); if (a) { a.classList.remove('maplibregl-compact-show'); a.removeAttribute('open'); } });
 const empty = { type: 'FeatureCollection', features: [] };
+// Su iPhone l'altezza dello schermo cambia quando compare o sparisce la barra del browser:
+// la mappa va ridisegnata a tutta altezza, altrimenti resta una fascia grigia in basso.
+new ResizeObserver(() => map.resize()).observe(document.getElementById('map'));
+if (window.visualViewport) visualViewport.addEventListener('resize', () => map.resize());
 const line = coords => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
 let meMarker, fromMarker, toMarker, puck;
 
