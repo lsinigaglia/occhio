@@ -241,7 +241,7 @@ public class AlertService extends Service implements LocationListener {
 
     private void fire(Alert a, float d) {
         int m = Math.max(50, Math.round(d / 50f) * 50);
-        String text = a.phrase.isEmpty() ? a.name : a.name + " — " + a.phrase;
+        String text = a.label + " · " + a.name;
         Notification n = new Notification.Builder(this, CH_ALERT)
                 .setSmallIcon(R.drawable.ic_notif)
                 .setColor(0xFFFF9800)
@@ -256,7 +256,7 @@ public class AlertService extends Service implements LocationListener {
                 .build();
         nm.notify(100 + fired++, n);
         showCard(a, m);
-        if (!playClips(a)) speak("Occhio. " + a.name + ". " + a.phrase);
+        if (!playClips(a)) speak(a.label + ". " + a.name);
         Log.i(TAG, "avviso: " + text + " a " + m + " m");
     }
 
@@ -278,7 +278,7 @@ public class AlertService extends Service implements LocationListener {
 
         ImageView icon = new ImageView(this);
         icon.setImageResource("ped".equals(a.kind) ? R.drawable.ic_alert_ped
-                : "lat".equals(a.kind) ? R.drawable.ic_alert_turn : R.drawable.ic_alert_warn);
+                : "corsia".equals(a.kind) || "prec".equals(a.kind) || "rot".equals(a.kind) ? R.drawable.ic_alert_turn : R.drawable.ic_alert_warn);
         root.addView(icon, new LinearLayout.LayoutParams((int) (170 * dp), (int) (170 * dp)));
 
         TextView big = new TextView(this);

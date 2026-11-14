@@ -140,20 +140,25 @@ function advice(h) {
   return a;
 }
 // mezza frase da dire mentre si guida
+// Tipi di avviso. Il tipo dipende dalla dinamica più frequente degli incidenti in quel punto.
+// PHRASES spiega in poche parole cosa succede lì; ALERT_LABEL è la scritta della card.
 const PHRASES = {
-  ped: 'attenzione agli attraversamenti pedonali', lat: 'attenzione a chi svolta o si immette', tamp: 'tieni la distanza',
-  sosta: 'attenzione a portiere e doppie file', fondo: 'fondo insidioso, rallenta', rallenta: 'rallenta',
+  ped: 'qui attraversano in tanti', prec: "c'è chi non dà la precedenza", corsia: 'cambi di corsia improvvisi',
+  tamp: 'si frena di colpo, tieni la distanza', buche: 'buche e ostacoli sul fondo',
+  sosta: 'portiere e ripartenze dalle auto in sosta', rot: 'guarda chi entra in rotatoria',
 };
 function phraseKey(h) {
-  const s = (h.nat[0] ? h.nat[0][0] : '').toLowerCase();
-  if (s.includes('pedone')) return 'ped';
-  if (s.includes('laterale')) return 'lat';
-  if (s.includes('tamponamento')) return 'tamp';
-  if (s.includes('sosta') || s.includes('fermo') || s.includes('arresto')) return 'sosta';
-  if (s.includes('ostacolo') || s.includes('fuoriuscita') || s.includes('caduta') || s.includes('buche')) return 'fondo';
-  return 'rallenta';
+  const g = grouped(h)[0], l = g ? g[0] : '';
+  if (l.startsWith('Investimenti')) return 'ped';
+  if (l.startsWith('Tamponamenti')) return 'tamp';
+  if (l.startsWith('Urti contro veicoli')) return 'sosta';
+  if (l.startsWith('Urti contro') || l.startsWith('Cadute') || l.startsWith('Uscite')) return 'buche';
+  if (/rotatoria/i.test(h.part || '')) return 'rot';
+  if (l.startsWith('Scontri laterali') || l.startsWith('Scontri frontali')) return 'corsia';
+  return 'prec';
 }
 const phrase = h => PHRASES[phraseKey(h)];
+const alertLabel = h => ALERT_LABEL[phraseKey(h)].join(' ');
 
 // Avvisi con voce registrata (ElevenLabs): "Occhio" + nome della strada + mezza frase.
 // audio/index.json dice quali clip esistono; dove ne manca una parla la voce del telefono.
@@ -165,21 +170,21 @@ function alertClips(h) {
   if (!CLIPS || !h.s1) return null;
   const n = slug(h.s1), p = phraseKey(h);
   if (!CLIPS.names.has(n) || !CLIPS.phrases.has(p)) return null;
-  return ['audio/occhio.mp3', `audio/n/${n}.mp3`, `audio/p/${p}.mp3`];
+  return [`audio/p/${p}.mp3`, `audio/n/${n}.mp3`];
 }
 const player = new Audio();
 // i browser lasciano partire l'audio solo dopo un tocco: lo si sblocca al tocco su Avvia o Simula
 function unlockAudio() {
   if (!CLIPS) return;
   try {
-    player.muted = true; player.src = 'audio/occhio.mp3';
+    player.muted = true; player.src = 'audio/p/ped.mp3';
     const p = player.play();
     if (p) p.then(() => { player.pause(); player.muted = false; }).catch(() => { player.muted = false; });
   } catch (e) { /* si userà la voce del telefono */ }
 }
 function sayAlert(h) {
   if (S.mute) return;
-  const text = `Occhio. ${h.s1 || hname(h)}. ${phrase(h)}.`, clips = alertClips(h);
+  const text = `${alertLabel(h)}. ${h.s1 || hname(h)}.`, clips = alertClips(h);
   if (!clips) return say(text);
   let i = 0;
   const fail = () => { player.onended = null; player.onerror = null; say(text); };
@@ -475,7 +480,7 @@ function previewHtml() {
     h += `<h3>${top.length === 1 ? 'Il punto da ricordare' : `I ${top.length} punti da ricordare`}</h3>`;
     for (const t of top) {
       h += `<button class="keep" type="button" data-hot="${t.h.id}"><span class="badge ${hclass(t.h)}">${t.h.n}</span>
-        <span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(phrase(t.h))}</span></span><span class="hdist">${fmtDist(t.x.at)}</span></button>`;
+        <span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(alertLabel(t.h))}: ${esc(phrase(t.h))}</span></span><span class="hdist">${fmtDist(t.x.at)}</span></button>`;
     }
     h += `<p class="note" style="margin:8px 0 0">Durante il viaggio ti avviso a voce solo prima di questi.</p>`;
     const rest = r.hot.filter(x => !topIds.has(x.id));
@@ -563,7 +568,7 @@ function startBackground() {
   const r = S.routes[S.sel];
   const alerts = top3(r).map(t => ({
     lat: t.h.lat, lon: t.h.lon, name: t.h.s1 || hname(t.h), phrase: phrase(t.h),
-    label: ALERT_LABEL[phraseKey(t.h)].join(' '), kind: phraseKey(t.h),
+    label: alertLabel(t.h), kind: phraseKey(t.h),
     clips: (alertClips(t.h) || []).map(u => new URL(u, location.href).href),
   }));
   if (!alerts.length) { toast('Nessun punto critico su questo percorso'); return openGmaps(true); }
@@ -579,7 +584,7 @@ function bgHtml() {
     <div class="actions" style="margin-bottom:4px"><button class="btn primary" type="button" data-act="gnav">${ICON.nav}Apri Google Maps</button>
     <button class="btn danger" type="button" data-act="bgstop">Termina</button></div>
     ${full ? '' : `<div class="advice">${ICON.bulb}<div>Per l'avviso grande a tutto schermo, consenti a Occhio di comparire sopra le altre app. <button class="link" style="padding:6px 0 0;display:block" type="button" data-act="overlay">Attiva</button></div></div>`}
-    ${top.map(t => `<div class="keep"><span class="badge ${hclass(t.h)}">${t.h.n}</span><span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(phrase(t.h))}</span></span></div>`).join('')}`;
+    ${top.map(t => `<div class="keep"><span class="badge ${hclass(t.h)}">${t.h.n}</span><span class="hmain"><b>${esc(hname(t.h))}</b><span class="say">${esc(alertLabel(t.h))}: ${esc(phrase(t.h))}</span></span></div>`).join('')}`;
 }
 
 /* ------------------------------------------------------------------ viaggio */
@@ -734,17 +739,17 @@ function updateNav(force) {
   if (next) {
     const h = S.hot[next.id], d = Math.max(0, next.at - s);
     if (d <= 260) {
-      const k = phraseKey(h), top = n.voice.has(next.id), sym = ALERT_ICON[k] || ALERT_ICON.rallenta;
+      const k = phraseKey(h), top = n.voice.has(next.id), sym = ALERT_ICON[k], lab = ALERT_LABEL[k];
       if (!n.spoken.has(next.id)) {
         n.spoken.add(next.id);
         if (top) { n.bigUntil = now + 5000; flashScreen(); sayAlert(h); }
       }
       alerting = top;
       if (top && now < n.bigUntil) {
-        html = `<div class="occbig"><span class="sym">${sym}</span><div><div class="pre">${esc(ALERT_LABEL[k][0])}</div><div class="lab">${esc(ALERT_LABEL[k][1])}</div><div class="where">tra ${fmtDist(d)} · ${esc(h.s1 || hname(h))}</div></div></div>`
+        html = `<div class="occbig"><span class="sym">${sym}</span><div><div class="pre">${esc(lab[0])}</div><div class="lab ${labSize(lab[1])}">${esc(lab[1])}</div><div class="where">tra ${fmtDist(d)} · ${esc(h.s1 || hname(h))}</div></div></div>`
           + (st ? `<div class="manmini"><span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span></div>` : '');
       } else {
-        html += `<div class="occ"><span class="sym">${sym}</span><div><b>${esc(ALERT_LABEL[k].join(' '))} · ${fmtDist(d)}</b>${esc(h.s1 || hname(h))}</div></div>`;
+        html += `<div class="occ"><span class="sym">${sym}</span><div><b>${esc(lab.join(' '))} · ${fmtDist(d)}</b>${esc(h.s1 || hname(h))}</div></div>`;
       }
     }
   }
@@ -755,13 +760,20 @@ function updateNav(force) {
 // --- avviso per chi guida: poche parole grandi, un simbolo, tutto lo schermo che si accende
 // [riga piccola, parola grande]: si legge "Occhio ai pedoni", con la parola chiave in evidenza
 const ALERT_LABEL = {
-  ped: ['Occhio ai', 'pedoni'], lat: ['Occhio a', 'chi svolta'], tamp: ['Occhio alle', 'frenate'],
-  sosta: ['Occhio alle', 'portiere'], fondo: ['Occhio al', 'fondo'], rallenta: ['Occhio,', 'rallenta'],
+  ped: ['Occhio ai', 'pedoni'], prec: ['Occhio alle', 'precedenze'], corsia: ['Occhio a chi', 'cambia corsia'],
+  tamp: ['Occhio ai', 'tamponamenti'], buche: ['Occhio alle', 'buche'], sosta: ['Occhio alle', 'auto in sosta'],
+  rot: ['Occhio in', 'rotatoria'],
 };
+// la parola grande si rimpicciolisce quanto basta per stare su una riga
+const labSize = t => { const w = Math.max(...t.split(' ').map(x => x.length)); return w <= 7 ? '' : w <= 10 ? 'm' : 's'; };
 const ALERT_ICON = {
   ped: '<svg viewBox="0 0 24 24"><path d="M13.500 5.500c1.100 0 2-.900 2-2s-.900-2-2-2-2 .900-2 2 .900 2 2 2zM9.800 8.900L7 23h2.100l1.800-8 2.100 2v6h2v-7.500l-2.100-2 .600-3C14.800 12 16.800 13 19 13v-2c-1.900 0-3.500-1-4.300-2.400l-1-1.600c-.400-.600-1-1-1.700-1-.300 0-.500.100-.800.100L6 8.300V13h2V9.600l1.800-.700"/></svg>',
-  lat: '<svg viewBox="0 0 24 24"><path d="M14 4l2.290 2.290-2.880 2.880 1.420 1.420 2.880-2.880L20 10V4zm-4 0H4v6l2.290-2.290 4.710 4.700V20h2v-8.410l-5.290-5.300z"/></svg>',
-  rallenta: '<svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
+  prec: '<svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M1 3h22L12 21.500zM5.200 5.500h13.600L12 16.700z"/></svg>',
+  corsia: '<svg viewBox="0 0 24 24"><path d="M18 4l-4 4h3v7c0 1.100-.900 2-2 2s-2-.900-2-2V8c0-2.210-1.790-4-4-4S5 5.790 5 8v7H2l4 4 4-4H7V8c0-1.100.900-2 2-2s2 .900 2 2v7c0 2.210 1.790 4 4 4s4-1.790 4-4V8h3l-4-4z"/></svg>',
+  tamp: '<svg viewBox="0 0 24 24"><path d="M18.920 6.010C18.720 5.420 18.160 5 17.500 5h-11c-.660 0-1.210.420-1.420 1.010L3 12v8c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-1h12v1c0 .550.450 1 1 1h1c.550 0 1-.450 1-1v-8l-2.080-5.990zM6.500 16c-.830 0-1.500-.670-1.500-1.500S5.670 13 6.500 13s1.500.670 1.500 1.500S7.330 16 6.500 16zm11 0c-.830 0-1.500-.670-1.500-1.500s.670-1.500 1.500-1.500 1.500.670 1.500 1.500-.670 1.500-1.500 1.500zM5 11l1.500-4.500h11L19 11H5z"/></svg>',
+  buche: '<svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
+  sosta: '<svg viewBox="0 0 24 24"><path d="M13 3H6v18h4v-6h3c3.310 0 6-2.690 6-6s-2.690-6-6-6zm.200 8H10V7h3.200c1.100 0 2 .900 2 2s-.900 2-2 2z"/></svg>',
+  rot: '<svg viewBox="0 0 24 24"><path d="M12 6v3l4-4-4-4v3c-4.420 0-8 3.580-8 8 0 1.570.460 3.030 1.240 4.260L6.700 14.800c-.450-.830-.700-1.790-.700-2.800 0-3.310 2.690-6 6-6zm6.760 1.740L17.300 9.200c.440.840.700 1.790.700 2.800 0 3.310-2.690 6-6 6v-3l-4 4 4 4v-3c4.420 0 8-3.580 8-8 0-1.570-.460-3.030-1.240-4.260z"/></svg>',
 };
 const flashEl = document.body.appendChild(Object.assign(document.createElement('div'), { id: 'flash' }));
 function flashScreen() {

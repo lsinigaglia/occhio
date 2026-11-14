@@ -1,4 +1,4 @@
-"""Genera con ElevenLabs le clip vocali degli avvisi: "Occhio", i nomi delle strade, le mezze frasi.
+"""Genera con ElevenLabs le clip vocali degli avvisi: la frase ("Occhio ai pedoni") e il nome della strada.
 
 Uso:
     python pipeline/voice.py --voice <voice_id> [--model eleven_v4] [--only "Via Marmorata|Via Nicola Zabaglia"]
@@ -19,12 +19,13 @@ AUDIO = os.path.join(ROOT, 'docs', 'audio')
 
 # le stesse chiavi usate in docs/app.js (PHRASES)
 PHRASES = {
-    'ped': 'Attenzione agli attraversamenti pedonali.',
-    'lat': 'Attenzione a chi svolta o si immette.',
-    'tamp': 'Tieni la distanza.',
-    'sosta': 'Attenzione a portiere e doppie file.',
-    'fondo': 'Fondo insidioso, rallenta.',
-    'rallenta': 'Rallenta.',
+    'ped': 'Occhio ai pedoni.',
+    'prec': 'Occhio alle precedenze.',
+    'corsia': 'Occhio a chi cambia corsia.',
+    'tamp': 'Occhio ai tamponamenti.',
+    'buche': 'Occhio alle buche.',
+    'sosta': 'Occhio alle auto in sosta.',
+    'rot': 'Occhio in rotatoria.',
 }
 ROMAN = {'Ii': 'Secondo', 'Iii': 'Terzo', 'Iv': 'Quattro', 'Vi': 'Sesto', 'Xii': 'Dodicesimo', 'Xx': 'Venti',
          'Xxi': 'Ventuno', 'Xxiii': 'Ventitreesimo', 'Xxiv': 'Ventiquattro', 'Xxv': 'Venticinque'}
@@ -82,8 +83,7 @@ def main():
     if a.only:
         wanted = {slug(x) for x in a.only.split('|')}
         names = [n for n in names if slug(n) in wanted]
-    jobs = [('occhio.mp3', 'Occhio!')]
-    jobs += [(f'p/{k}.mp3', t) for k, t in PHRASES.items()]
+    jobs = [(f'p/{k}.mp3', t) for k, t in PHRASES.items()]
     jobs += [(f'n/{slug(n)}.mp3', spoken(n)) for n in names]
     os.makedirs(os.path.join(AUDIO, 'n'), exist_ok=True)
     os.makedirs(os.path.join(AUDIO, 'p'), exist_ok=True)
