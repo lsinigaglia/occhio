@@ -196,12 +196,15 @@ function unlockAudio() {
   } catch (e) { /* si userà la voce del telefono */ }
 }
 const sayAlert = h => sayKind(phraseKey(h));
+let alertVoiceUntil = 0;
 function sayKind(k) {
-  if (S.mute) return;
+  // l'avviso zittisce l'indicazione in corso e per qualche secondo nessuna indicazione gli parla sopra
+  alertVoiceUntil = performance.now() + 3000;
+  try { if (NATIVE) NATIVE.speak(''); else if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { /* niente da zittire */ }
   const text = SOLO ? 'Occhio!' : ALERT_LABEL[k].join(' ') + '.', clips = clipFor(SOLO ? 'occhio' : k);
-  if (!clips) return say(text);
+  if (!clips) return speak(text);
   let i = 0;
-  const fail = () => { player.onended = null; player.onerror = null; say(text); };
+  const fail = () => { player.onended = null; player.onerror = null; speak(text); };
   const next = () => {
     if (i >= clips.length) { player.onended = null; return; }
     player.muted = false; player.src = clips[i++]; player.onended = next; player.onerror = fail;
@@ -209,69 +212,12 @@ function sayKind(k) {
   };
   next();
 }
-// Tratti critici: i punti critici vicini lungo il percorso (a meno di 350 m l'uno dall'altro)
-// contano come un tratto solo. Chi guida non deve tenere a mente 13 incroci, ma 3 o 4 tratti.
-function zones(r) {
-  if (r.zones) return r.zones;
-  const out = [];
-  for (const x of r.hot) {
-    const h = S.hot[x.id], z = out[out.length - 1];
-    if (z && x.at - z.end <= 350) { z.hs.push(h); z.end = x.at; z.n += h.n; z.w += h.w; if (h.w > z.main.w) z.main = h; }
-    else out.push({ hs: [h], at: x.at, end: x.at, n: h.n, w: h.w, main: h, first: h });
-  }
-  for (const z of out) {
-    const c = new Map();
-    for (const h of z.hs) if (h.s1) c.set(h.s1, (c.get(h.s1) || 0) + h.n);
-    z.name = [...c.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0])[0] || hname(z.main);
-    z.kind = phraseKey(z.main);
-  }
-  return (r.zones = out);
-}
-// i tratti da ricordare: i più pesanti, al massimo 3 (4 sui tragitti lunghi), nell'ordine in cui si incontrano
-const topZones = r => [...zones(r)].sort((a, b) => b.w - a.w).slice(0, r.dist < 4000 ? 3 : 4).sort((a, b) => a.at - b.at);
-const zclass = z => z.n >= 40 ? 'r' : z.n >= 20 ? 'o' : 'a';
-const zsub = z => (z.hs.length > 1 ? `${z.hs.length} punti vicini · ` : '') + `${z.n} incidenti`;
-function routeCum(r) {
-  if (!r.cum) { r.cum = [0]; for (let i = 1; i < r.coords.length; i++) r.cum.push(r.cum[i - 1] + distM(r.coords[i - 1], r.coords[i])); }
-  return r.cum;
-}
-// il pezzo di percorso tra due distanze dalla partenza (in metri)
-function sliceRoute(r, a, b) {
-  const c = r.coords, cum = routeCum(r);
-  const at = d => {
-    let i = 0; while (i < cum.length - 2 && cum[i + 1] < d) i++;
-    const t = Math.min(1, Math.max(0, (d - cum[i]) / Math.max(1e-6, cum[i + 1] - cum[i])));
-    return [c[i][0] + (c[i + 1][0] - c[i][0]) * t, c[i][1] + (c[i + 1][1] - c[i][1]) * t];
-  };
-  a = Math.max(0, a); b = Math.min(cum[cum.length - 1], b);
-  const out = [at(a)];
-  for (let i = 0; i < c.length; i++) if (cum[i] > a && cum[i] < b) out.push(c[i]);
-  out.push(at(b));
-  return out;
-}
-// i tratti come linee colorate: arancione pieno quelli da ricordare, chiaro i minori
-function zoneLines(r) {
-  const tops = new Set(topZones(r));
-  return { type: 'FeatureCollection', features: zones(r).map(z => ({ type: 'Feature', properties: { top: tops.has(z) }, geometry: { type: 'LineString', coordinates: sliceRoute(r, z.at - 60, z.end + 60) } })) };
-}
-const zoneMarkers = r => ({ type: 'FeatureCollection', features: topZones(r).map(z => ({ type: 'Feature', properties: { id: z.main.id, n: z.n }, geometry: { type: 'Point', coordinates: [z.main.lon, z.main.lat] } })) });
-function grouped(h) {
-  const m = new Map();
-  for (const [n, k] of h.nat) { const l = natLabel(n); m.set(l, (m.get(l) || 0) + k); }
-  return [...m.entries()].sort((a, b) => b[1] - a[1]);
-}
-
-let toastT;
-function toast(t) { const el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 3200); }
-
-function syncSheetHeight() {
-  requestAnimationFrame(() => document.documentElement.style.setProperty('--sheet-h', $('#sheet').offsetHeight + 'px'));
-}
-new ResizeObserver(syncSheetHeight).observe($('#sheet'));
-
-/* ------------------------------------------------------------------ voce */
+// Indicazioni di svolta e messaggi di servizio: si possono spegnere e non parlano mai sopra a "Occhio".
 function say(t) {
-  if (S.mute) return;
+  if (S.mute || performance.now() < alertVoiceUntil || (!player.paused && !player.muted)) return;
+  speak(t);
+}
+function speak(t) {
   if (NATIVE) { try { NATIVE.speak(t); } catch (e) { /* la voce è un extra */ } return; }
   if (!('speechSynthesis' in window)) return;
   try {
@@ -632,7 +578,8 @@ $('#sheetc').onclick = e => {
   else if (a === 'exit') stopNav();
   else if (a === 'mute') {
     S.mute = !S.mute;
-    if (S.mute) { player.pause(); if (NATIVE) NATIVE.speak(''); else if (window.speechSynthesis) speechSynthesis.cancel(); }
+    if (S.mute) { try { if (NATIVE) NATIVE.speak(''); else if (window.speechSynthesis) speechSynthesis.cancel(); } catch (err) { /* niente da zittire */ } }
+    toast(S.mute ? 'Indicazioni a voce spente: resta solo «Occhio»' : 'Indicazioni a voce accese');
     render();
     if (S.nav) { if (S.nav.done) { const e = $('#eta'); if (e) e.innerHTML = '<b>Arrivato</b><span>Tocca Esci per tornare al percorso</span>'; } else updateNav(true); }
   }
@@ -748,7 +695,7 @@ async function reroute(me) {
     map.getSource('r-zones').setData(zoneLines(nr));
     const cum = [0];
     for (let i = 1; i < nr.coords.length; i++) cum.push(cum[i - 1] + distM(nr.coords[i - 1], nr.coords[i]));
-    Object.assign(n, { r: nr, cum, total: cum[cum.length - 1], s: 0, idx: 0, si: 0, said: new Set(), tz: topZones(nr), key: '' });
+    Object.assign(n, { r: nr, cum, total: cum[cum.length - 1], s: 0, idx: 0, si: 0, said: new Set(), curZ: null, tz: topZones(nr), key: '' });
   } catch (e) { /* si riprova al prossimo rilevamento */ } finally { n.rerouting = false; n.off = 0; }
 }
 
@@ -827,22 +774,20 @@ function updateNav(force) {
     if (dm <= 320 && dm > 110 && !st.v1) { st.v1 = true; say(`Tra ${fmtDist(dm).replace(' m', ' metri')}, ${stepText(st).replace(/^./, ch => ch.toLowerCase())}`); }
     else if (dm <= 45 && !st.v2) { st.v2 = true; say(stepText(st)); }
   }
-  // Tratto critico in arrivo, solo per i tratti da ricordare: lo schermo lampeggia e si illumina e una card
-  // grande prende per qualche secondo il posto della svolta (che resta sotto, in piccolo).
-  // Poi rimane una striscia finché il tratto non è finito. Per i tratti minori non si mostra niente.
-  const z = n.tz.find(z => z.end > s - 25);
+  // Tratto critico in arrivo, solo per i tratti da ricordare. Una card grande sola, pensata per la
+  // coda dell'occhio di chi guida: compare 300 m prima del tratto e resta mentre lo si percorre
+  // (al massimo per i primi 400 m, e in ogni caso almeno 8 secondi). Nessun avviso piccolo.
+  const cardEnd = z => Math.min(z.end, z.at + 400) + 60;
+  let z = n.tz.find(z => cardEnd(z) > s);
+  if (n.curZ && n.curZ !== z && now - n.shownAt < 8000) z = n.curZ;
   let alerting = false;
-  if (z && z.at - s <= 260) {
-    const d = Math.max(0, z.at - s), k = z.kind, name = esc(z.name);
-    if (!n.said.has(z)) { n.said.add(z); n.bigUntil = now + 5000; flashScreen(); sayKind(k); }
+  if (z && (z.at - s <= 300 || z === n.curZ)) {
+    const d = Math.max(0, z.at - s);
+    if (!n.said.has(z)) { n.said.add(z); n.curZ = z; n.shownAt = now; flashScreen(); sayKind(z.kind); }
     alerting = true;
-    if (now < n.bigUntil) {
-      html = bigCard(k, `${d > 0 ? 'tra ' + fmtDist(d) : 'adesso'} · ${name}`)
-        + (st ? `<div class="manmini"><span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span></div>` : '');
-    } else {
-      html += stripCard(k, d > 0 ? fmtDist(d) : `ancora ${fmtDist(Math.max(0, z.end - s))}`, name);
-    }
-  }
+    html = bigCard(z.kind, `${d > 0 ? 'tra ' + fmtDist(d) : 'adesso'} · ${esc(z.name)}`)
+      + (st ? `<div class="manmini"><span class="arrow">${stepIcon(st)}</span><b>${fmtNear(dm)}</b><span>${esc(stepText(st))}</span></div>` : '');
+  } else if (n.curZ && now - n.shownAt >= 8000) n.curZ = null;
   setAlerting(alerting);
   if (html !== n.key) { n.key = html; card.className = ''; card.innerHTML = html; }
 }
@@ -895,7 +840,7 @@ function setAlerting(on) {
 function navBarHtml() {
   return `<div class="navbar"><div class="eta" id="eta"></div>
     ${S.nav && S.nav.sim ? '<button class="btn ghost" type="button" data-act="skip" aria-label="Salta al prossimo avviso">⏭</button>' : ''}
-    <button class="btn ghost" type="button" data-act="mute" aria-label="Voce">${S.mute ? ICON.mute : ICON.vol}</button>
+    <button class="btn ghost" type="button" data-act="mute" aria-label="Indicazioni a voce">${S.mute ? ICON.mute : ICON.vol}</button>
     <button class="btn danger" type="button" data-act="exit">Esci</button></div>`;
 }
 function finishNav() {
@@ -951,10 +896,7 @@ function demoAlert(k) {
   card.innerHTML = bigCard(k, 'tra 200 m · Via Marmorata');
   flashScreen(); setAlerting(true);
   player.muted = false; sayKind(k);
-  demoT = setTimeout(() => {
-    card.innerHTML = stripCard(k, '150 m', 'Via Marmorata');
-    demoT = setTimeout(endDemoAlert, 3000);
-  }, 5000);
+  demoT = setTimeout(endDemoAlert, 8000);
 }
 function endDemoAlert() {
   if (demoT === null) return;
