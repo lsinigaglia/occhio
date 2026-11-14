@@ -900,6 +900,20 @@ function skipAhead() {
 }
 
 /* avvio */
+// Link diretto a un tragitto: ?a=lat,lon,Nome per l'arrivo e, volendo, ?da=lat,lon,Nome per la partenza
+// (senza "da" si parte dalla posizione attuale). Con &sim=1 parte subito la simulazione.
+const placeFromQS = k => {
+  const v = QS.get(k); if (!v) return null;
+  const [la, lo, ...n] = v.split(',');
+  return isFinite(+la) && isFinite(+lo) ? { name: n.join(',') || 'Punto scelto', lat: +la, lon: +lo } : null;
+};
+if (placeFromQS('a')) appReady.then(async () => {
+  S.to = placeFromQS('a'); S.from = placeFromQS('da');
+  if (!S.from) { await locate(false); S.from = myPlace(); }
+  if (!S.from) return toast('Consenti la posizione per calcolare il percorso da dove sei');
+  await go();
+  if (QS.get('sim') && S.routes) startNav(true);
+});
 if (QS.has('prova')) appReady.then(() => { setMode('prova'); $('#sheet').classList.add('full'); if (ALERT_LABEL[QS.get('demo')]) demoAlert(QS.get('demo')); });
 render();
 if (navigator.permissions && navigator.permissions.query) {
