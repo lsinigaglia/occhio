@@ -504,7 +504,7 @@ function previewHtml() {
       h += `<button class="keep" type="button" data-hot="${z.main.id}"><span class="badge ${zclass(z)}">${z.n}</span>
         <span class="hmain"><b>${esc(z.name)}</b><span class="say">${esc(zsub(z))}</span></span><span class="hdist">${fmtDist(z.at)}</span></button>`;
     }
-    h += `<p class="note" style="margin:8px 0 0">Durante il viaggio ti avviso solo prima di questi${all.length > top.length ? `. Gli altri ${all.length - top.length} tratti minori restano segnati sulla mappa` : ''}.</p>`;
+    h += `<p class="note" style="margin:8px 0 0">Durante il viaggio ti avviso solo prima di questi${all.length - top.length === 1 ? `. L'altro tratto, minore, resta segnato sulla mappa` : all.length > top.length ? `. Gli altri ${all.length - top.length} tratti minori restano segnati sulla mappa` : ''}.</p>`;
   }
   h += `<p class="note">Incidenti rilevati dalla Polizia Locale, ${period()} (open data Roma Capitale). Il confronto non tiene conto del traffico.</p>`;
   return h;
