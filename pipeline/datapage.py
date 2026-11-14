@@ -64,7 +64,16 @@ def sample():
         v = r.get('tipoveicolo', '')
         if v and v not in it['veh']:
             it['veh'].append(v)
-    good = [it for it in inc.values() if it['r'].get('strada2') and it['r'].get('latitude') and it['r'].get('naturaincidente')]
+    def punto(r):
+        # il verbale indica il punto con una traversa oppure con un numero civico
+        if r.get('strada2'):
+            return 'incrocio con ' + nome(r['strada2'])
+        if r.get('strada02', '').startswith('del civico') and r.get('chilometrica'):
+            return 'civico ' + r['chilometrica']
+        return ''
+    for it in inc.values():
+        it['punto'] = punto(it['r'])
+    good = [it for it in inc.values() if it['punto'] and it['r'].get('latitude') and it['r'].get('naturaincidente')]
     good.sort(key=lambda it: (it['r']['dataoraincidente'][6:10], it['r']['dataoraincidente'][3:5], it['r']['dataoraincidente'][0:2], it['r']['dataoraincidente'][11:16]))
     step = max(1, len(good) // 12)
     return good[::step][:12], os.path.basename(last)[:-4]
@@ -84,7 +93,7 @@ def main():
 
     tr_inc = ''.join(
         f"<tr><td class='nw'>{e(it['r']['dataoraincidente'][:16])}</td><td>{e(nome(it['r']['strada1']))}</td>"
-        f"<td>{e(nome(it['r']['strada2']))}</td><td>{e(it['r']['naturaincidente'])}</td>"
+        f"<td>{e(it['punto'])}</td><td>{e(it['r']['naturaincidente'])}</td>"
         f"<td>{e(', '.join(it['veh'][:3]))}</td><td class='n'>{e(it['r'].get('num_feriti', '') or '0')}</td>"
         f"<td class='nw mono'>{e(it['r']['latitude'])}, {e(it['r']['longitude'])}</td></tr>" for it in rows)
     tr_hot = ''.join(
@@ -142,9 +151,9 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 2px solid var(--line)
 </div>
 
 <h2>Com'è fatto il dato di partenza</h2>
-<p class="sub">Dodici incidenti veri di {e(mese(ym))}, così come li pubblica il Comune: quando, dove, che tipo, chi era coinvolto, quanti feriti, le coordinate.</p>
+<p class="sub">Dodici incidenti veri di {e(mese(ym))}, così come li pubblica il Comune: quando, in che punto della strada (incrocio o numero civico), che tipo, chi era coinvolto, quanti feriti, le coordinate.</p>
 <div class="wrap"><table>
-<tr><th>Data e ora</th><th>Strada</th><th>Traversa</th><th>Tipo di incidente</th><th>Veicoli</th><th class="n">Feriti</th><th>Coordinate</th></tr>
+<tr><th>Data e ora</th><th>Strada</th><th>Punto</th><th>Tipo di incidente</th><th>Veicoli</th><th class="n">Feriti</th><th>Coordinate</th></tr>
 {tr_inc}
 </table></div>
 <p class="note">Le coordinate sono ricavate dall'indirizzo del verbale e arrotondate a circa 10 metri. Scartiamo gli incidenti segnati su un punto generico della strada, perché creerebbero punti critici finti.</p>
