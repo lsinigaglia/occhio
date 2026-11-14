@@ -180,7 +180,8 @@ let STYLE = QS.get('stile') || 'street', VOICE = QS.get('voce') || 'jessica';
 const VOICES = { alice: ['Alice', 'audio/p'], jessica: ['Jessica', 'audio/v/jessica'], liam: ['Liam', 'audio/v/liam'] };
 const STYLES = { classico: 'Classico', sticker: 'Sticker', street: 'Street', chat: 'Chat' };
 // testo dell'avviso: la frase intera ("Occhio ai pedoni") oppure la sola parola "Occhio"
-let SOLO = (QS.get('testo') || pref('occhioTesto', 'frase')) === 'solo';
+// scelta fatta: durante il viaggio l'avviso dice solo "Occhio"; la frase intera resta raggiungibile con ?testo=frase
+let SOLO = QS.get('testo') !== 'frase';
 const TEXTS = { frase: 'Frase intera', solo: 'Solo "Occhio"' };
 const clipFor = k => CLIPS && CLIPS.has(k) ? [`${(VOICES[VOICE] || VOICES.alice)[1]}/${k}.mp3${VQ}`] : null;
 const alertClips = h => clipFor(phraseKey(h));
@@ -936,7 +937,6 @@ function provaHtml() {
   for (const h of S.hot) { const k = phraseKey(h); count[k] = (count[k] || 0) + 1; }
   return `<div class="dhead"><button class="iconbtn" type="button" data-act="home">${ICON.back}</button><div><h2>Prova gli avvisi</h2>
     <p class="sub">Tocca un avviso per vederlo e sentirlo com'è durante il viaggio.</p></div></div>
-    <h3>Testo</h3>${chips('testo', TEXTS, SOLO ? 'solo' : 'frase', x => x)}
     <h3>Avvisi</h3>
     ${Object.keys(ALERT_LABEL).map(k => `<button class="demo" type="button" data-act="demo" data-k="${k}"><span class="sym">${ALERT_ICON[k]}</span>
       <span class="hmain"><b>${esc(ALERT_LABEL[k].join(' '))}</b><span>${esc(PHRASES[k])} · ${count[k] || 0} punti</span></span></button>`).join('')}
