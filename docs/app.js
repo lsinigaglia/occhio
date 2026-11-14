@@ -812,7 +812,10 @@ function tick(now) {
   const dt = Math.min(0.5, (now - n.last) / 1000); n.last = now;
   const next = n.tz.find(z => z.at > n.s - 80);
   const d = next ? next.at - n.s : Infinity;
-  const target = d < 240 ? 16 : 110 * (+QS.get('vel') || 1);   // veloce tra un avviso e l'altro, lenta solo attorno all'avviso
+  // Simulazione da demo: attorno a un avviso rallenta quanto basta per leggere la card (circa 6 secondi),
+  // e tra un avviso e l'altro accelera sui tragitti lunghi, così tutto il viaggio dura meno di un minuto.
+  const k = n.tz.length, cruise = Math.max(110, Math.min(400, (n.total - 320 * k) / Math.max(8, 30 - 6 * k)));
+  const target = (d < 240 ? 55 : cruise) * (+QS.get('vel') || 1);
   n.v += (target - n.v) * Math.min(1, dt * 2.5);
   n.s = Math.min(n.total, n.s + n.v * dt);
   camera(placeAt(n.s), dt);
@@ -855,7 +858,8 @@ function updateNav(force) {
   // (al massimo per i primi 400 m, e in ogni caso almeno 8 secondi). Nessun avviso piccolo.
   const cardEnd = z => Math.min(z.end, z.at + 400) + 60;
   let z = n.tz.find(z => cardEnd(z) > s);
-  if (n.curZ && n.curZ !== z && now - n.shownAt < 8000) z = n.curZ;
+  const hold = n.sim ? 5000 : 8000;   // tempo minimo in cui la card resta sullo schermo
+  if (n.curZ && n.curZ !== z && now - n.shownAt < hold) z = n.curZ;
   let alerting = false;
   if (z && (z.at - s <= 300 || z === n.curZ)) {
     const d = Math.max(0, z.at - s);
@@ -875,7 +879,7 @@ function updateNav(force) {
     }
     setAlerting(true);
     return;
-  } else if (n.curZ && now - n.shownAt >= 8000) n.curZ = null;
+  } else if (n.curZ && now - n.shownAt >= hold) n.curZ = null;
   n.cardZ = null;
   setAlerting(alerting);
   if (html !== n.key) { n.key = html; card.className = ''; card.innerHTML = html; }
